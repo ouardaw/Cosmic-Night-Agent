@@ -3125,17 +3125,17 @@ div[data-testid="stTextInput"] input:focus {
         
         # AI Q&A Section
         st.markdown("""
-        <div class='cosmic-card gradient-container'>
-            <h2 class="gradient-text" style='text-align: center; font-family: Orbitron, sans-serif;'>
-                🔮 Ask the Cosmic Oracle
-            </h2>
-            <p style='text-align: center; opacity: 0.8;'>
-                Access the Galactic Archives.<br>
-                Submit your inquiry. The Cosmic Oracle will provide an immediate answer!
-            </p>
+        <div class='cosmic-card'>
+          <div class="gradient-text" style="font-family: Orbitron, sans-serif; text-align:center; font-size:2.2rem; margin:0 0 .35rem 0;">
+            🔮 Ask the Cosmic Oracle
+          </div>
+          <div style="text-align:center; opacity:.9;">
+            Access the Galactic Archives.<br/>
+            Submit your inquiry. The Cosmic Oracle will provide an immediate answer!
+          </div>
         </div>
-    """, unsafe_allow_html=True)
-        
+        """, unsafe_allow_html=True)
+                
         # Chat history
         if 'chat_history' not in st.session_state:
             st.session_state.chat_history = []
@@ -3190,17 +3190,15 @@ div[data-testid="stTextInput"] input:focus {
         </style>
         """, unsafe_allow_html=True)
        
-        st.markdown("""
-        <div class='cosmic-card gradient-container'>
-            <h3 class="gradient-text" style='
-                font-family: Orbitron, sans-serif;
-                margin: 0;
-                font-size: 1.3rem;
-                letter-spacing: 0.1em;text-align: center;
-            '>✨ QUICK COSMIC QUERIES ✨</h3>
-        </div>
-    """, unsafe_allow_html=True)
         
+        st.markdown("""
+        <div class='cosmic-card'>
+          <div class="gradient-text" style="font-family: Orbitron, sans-serif; text-align:center; font-size:1.6rem; letter-spacing:.12em; margin:0;">
+            ✨ QUICK COSMIC QUERIES ✨
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+                
         if st.session_state.get('ai_enabled', False):
             # AI-enhanced questions
             suggested_queries = st.session_state['ai_processor'].get_suggested_queries()
