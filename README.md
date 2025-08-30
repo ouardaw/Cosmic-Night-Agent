@@ -1,7 +1,9 @@
 # 🌌 Stellaris – Your Personal Gateway to the Cosmos
+🌌 Stellaris is an AI-powered astronomy web app that brings the universe to your fingertips.
+✨ Discover fun space facts, explore daily NASA images, and chat with the Cosmic AI Oracle to learn about the mysteries of the cosmos.
+🚀 Track real-time planets, 🛰 follow ISS flybys, ✨ browse constellation schedules, and 🌤 check stargazing conditions—all in one seamless experience.
 
-Stellaris is a **Streamlit-powered astronomy web app** that helps you explore the night sky in real-time.  
-From tracking visible planets to checking ISS crew updates and stargazing conditions, Stellaris brings the universe closer to you. 🚀✨  
+With Stellaris, the night sky isn’t just above you… it’s yours to explore. 🌠
 
 ---
 
