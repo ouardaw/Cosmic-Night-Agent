@@ -2707,21 +2707,23 @@ div[data-testid="stTextInput"] input:focus {
         # NASA Picture of the Day
         st.markdown("<div class='cosmic-section'>📸 NASA Astronomy Picture of the Day</div>", unsafe_allow_html=True)
         
+        # NASA Picture of the Day
+        #st.markdown("<div class='cosmic-section'>📸 NASA Astronomy Picture of the Day</div>", unsafe_allow_html=True)
+        
         try:
-            # Get NASA API key
             NASA_API_KEY = read_secret("NASA_API_KEY", "DEMO_KEY")
-            if not NASA_API_KEY:
-                NASA_API_KEY = "DEMO_KEY"
+            url = f"https://api.nasa.gov/planetary/apod?api_key={NASA_API_KEY}&thumbs=true"
             
-            url = f"https://api.nasa.gov/planetary/apod?api_key={NASA_API_KEY}"
-            
-            # Fetch APOD data with timeout
             response = requests.get(url, timeout=10)
             
             if response.status_code == 200:
                 apod = response.json()
                 
-                # Create two columns for image and description
+                # Debug: Show what we're getting
+                if st.session_state.get('debug_mode', False):
+                    st.json(apod)
+                
+                # Create two columns
                 col_img, col_desc = st.columns([1, 1])
                 
                 with col_img:
@@ -2734,34 +2736,38 @@ div[data-testid="stTextInput"] input:focus {
                     if date:
                         st.caption(f"📅 {date}")
                     
-                    # Display media
-                    url = f"https://api.nasa.gov/planetary/apod?api_key={NASA_API_KEY}&thumbs=true"
-
-                    
-                    # Display media
+                    # Display media - SIMPLIFIED LOGIC
                     media_url = apod.get('url', '')
                     media_type = apod.get('media_type', 'image')
-                    thumb_url = apod.get('thumbnail_url', '')
                     
-                    if media_type == "image" and media_url:
-                        st.image(media_url, caption=title, use_container_width=True)
-                    elif media_type == "video":
-                        # Videos (especially YouTube) don't embed well in Streamlit
-                        # Show thumbnail if available, otherwise show a placeholder
-                        if thumb_url:
-                            st.image(thumb_url, caption=f"{title} (Video Thumbnail)", use_container_width=True)
-                            st.info("📹 Today's APOD is a video")
+                    # Try to display the image/video
+                    try:
+                        if media_type == "image" and media_url:
+                            # Direct image display
+                            st.image(media_url, use_container_width=True)
+                        elif media_type == "video":
+                            # For videos, try thumbnail first
+                            thumb_url = apod.get('thumbnail_url', '')
+                            if thumb_url:
+                                st.image(thumb_url, caption="Video Thumbnail", use_container_width=True)
+                                st.info("📹 Today's APOD is a video")
+                            else:
+                                st.info("📹 Today's APOD is a video (preview unavailable)")
+                            
+                            # Provide link to video
+                            if media_url:
+                                st.markdown(f"**[▶️ Watch Video]({media_url})**")
                         else:
-                            st.info("📹 Today's APOD is a video (thumbnail unavailable)")
-                        
-                        # Always provide link to video
+                            st.warning("Media could not be displayed")
+                            if media_url:
+                                st.markdown(f"[View on NASA]({media_url})")
+                                
+                    except Exception as img_error:
+                        st.error(f"Could not display image: {str(img_error)[:100]}")
                         if media_url:
-                            st.markdown(f"**[▶️ Watch Video]({media_url})**")
-                    else:
-                        st.info("Media type not supported or unavailable")
-                
+                            st.markdown(f"[View on NASA]({media_url})")
                     
-                    # Copyright info if available
+                    # Copyright info
                     copyright_info = apod.get('copyright', '')
                     if copyright_info:
                         st.caption(f"© {copyright_info}")
@@ -2769,43 +2775,41 @@ div[data-testid="stTextInput"] input:focus {
                 with col_desc:
                     st.markdown("<h4 style='color: #7c3aed;'>📖 Explanation</h4>", unsafe_allow_html=True)
                     
-                    # Display explanation
+                    # Display explanation - SAFER METHOD
                     explanation = apod.get('explanation', 'No description available')
                     
-                    # Create a scrollable container for long descriptions
-                    # Around lines 2741–2751
+                    # Clean the explanation text to avoid HTML issues
+                    import html
+                    explanation_clean = html.escape(explanation)
+                    
+                    # Use a text area or just markdown without HTML
                     st.markdown(f"""
-                        <div style='background: rgba(131,56,236,0.1);
-                                   border: 1px solid rgba(131,56,236,0.3);
-                                   border-radius: 10px;
-                                   padding: 1rem;
-                                   line-height: 1.6;'>
-                            {explanation}
-                        </div>
+                    <div style='background: rgba(131,56,236,0.1);
+                               border: 1px solid rgba(131,56,236,0.3);
+                               border-radius: 10px;
+                               padding: 1rem;
+                               max-height: 400px;
+                               overflow-y: auto;
+                               line-height: 1.6;'>
+                        {explanation_clean}
+                    </div>
                     """, unsafe_allow_html=True)
                     
-                    # HD version link if available
+                    # Alternative: Just use plain markdown (more reliable)
+                    # st.text_area("Explanation", explanation, height=300, disabled=True)
+                    
+                    # HD version link
                     hdurl = apod.get('hdurl', '')
                     if hdurl:
                         st.markdown(f"[🔍 View HD Version]({hdurl})")
-                    
-                    # Service version
-                    service_version = apod.get('service_version', '')
-                    if service_version:
-                        st.caption(f"API Version: {service_version}")
             else:
                 st.warning(f"Unable to load NASA Picture (Status: {response.status_code})")
                 st.info("Visit [apod.nasa.gov](https://apod.nasa.gov) for today's image")
                 
-        except requests.exceptions.Timeout:
-            st.warning("⏱️ NASA API timeout. Please try again later.")
-            st.info("Visit [apod.nasa.gov](https://apod.nasa.gov) for today's image")
         except Exception as e:
-            st.warning(f"Unable to load NASA Picture of the Day")
+            st.warning("Unable to load NASA Picture of the Day")
+            st.error(f"Error details: {str(e)[:200]}")
             st.info("Visit [apod.nasa.gov](https://apod.nasa.gov) for today's image")
-            
-            if st.session_state.get('debug_mode', False):
-                st.error(f"Debug: {str(e)}")
     
     
     elif st.session_state['menu_selection'] == "Celestial Tracker":
