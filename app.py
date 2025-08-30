@@ -2686,7 +2686,7 @@ div[data-testid="stTextInput"] input:focus {
         
         try:
             # Get NASA API key
-            NASA_API_KEY = os.getenv("NASA_API_KEY") or st.secrets.get("NASA_API_KEY", None)
+            NASA_API_KEY = read_secret("NASA_API_KEY", "DEMO_KEY")
             if not NASA_API_KEY:
                 NASA_API_KEY = "DEMO_KEY"
             
