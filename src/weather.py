@@ -19,7 +19,19 @@ try:
     load_dotenv()
 except ImportError:
     pass
-
+def read_secret(name: str, default=None):
+    # 1) Try env var (works in Codespaces / local with .env)
+    v = os.getenv(name)
+    if v and v.strip():
+        return v.strip()
+    # 2) Try Streamlit Cloud secrets (works on Cloud)
+    try:
+        v = st.secrets[name]  # bracket access is safest across versions
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    except Exception:
+        pass
+    return default
 def get_weather_forecast(lat: float, lon: float) -> Dict[str, Any]:
     """
     Get weather forecast for given coordinates
@@ -33,7 +45,7 @@ def get_weather_forecast(lat: float, lon: float) -> Dict[str, Any]:
     """
     
     # Get API key from environment
-    api_key = os.getenv("OPENWEATHER_API_KEY") or st.secrets.get("OPENWEATHER_API_KEY", None)
+    api_key  = read_secret("OPENWEATHER_API_KEY")
     
     if not api_key:
         return {
