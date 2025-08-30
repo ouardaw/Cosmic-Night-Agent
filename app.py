@@ -2736,22 +2736,29 @@ div[data-testid="stTextInput"] input:focus {
                     
                     # Display media
                     url = f"https://api.nasa.gov/planetary/apod?api_key={NASA_API_KEY}&thumbs=true"
+
                     
-                    media_url  = apod.get('url', '')
+                    # Display media
+                    media_url = apod.get('url', '')
                     media_type = apod.get('media_type', 'image')
-                    thumb_url  = apod.get('thumbnail_url')
+                    thumb_url = apod.get('thumbnail_url', '')
                     
                     if media_type == "image" and media_url:
                         st.image(media_url, caption=title, use_container_width=True)
-                    elif media_type == "video" and media_url:
-                        if any(h in media_url for h in ("youtube.com", "youtu.be", "vimeo.com")):
-                            st.video(media_url)
+                    elif media_type == "video":
+                        # Videos (especially YouTube) don't embed well in Streamlit
+                        # Show thumbnail if available, otherwise show a placeholder
+                        if thumb_url:
+                            st.image(thumb_url, caption=f"{title} (Video Thumbnail)", use_container_width=True)
+                            st.info("📹 Today's APOD is a video")
                         else:
-                            if thumb_url:
-                                st.image(thumb_url, caption=title, use_container_width=True)
-                            st.link_button("Open APOD Video", media_url)
+                            st.info("📹 Today's APOD is a video (thumbnail unavailable)")
+                        
+                        # Always provide link to video
+                        if media_url:
+                            st.markdown(f"**[▶️ Watch Video]({media_url})**")
                     else:
-                        st.info("Media type not supported or unavailable today.")
+                        st.info("Media type not supported or unavailable")
                 
                     
                     # Copyright info if available
