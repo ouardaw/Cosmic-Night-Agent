@@ -2405,7 +2405,7 @@ div[data-testid="stTextInput"] input:focus {
                         st.session_state['location_valid'] = False
         
         # Keep the button as a backup option
-        if st.button("Calibrate Your Observatory", width='stretch'):
+        if st.button("Calibrate Your Observatory", use_container_width=True):
             if city and city != st.session_state.get('current_city', ''):
                 # Same logic as above
                 st.session_state.pop('location_error', None)
@@ -2436,8 +2436,8 @@ div[data-testid="stTextInput"] input:focus {
         if st.button(
             "🌍 Home", 
             key="home_button", 
-            width='stretch',
-            help="Return to home page with daily cosmic content"
+            help="Return to home page with daily cosmic content",
+            use_container_width=True
         ):
             st.session_state['menu_selection'] = "Home"
             st.rerun()
@@ -2458,7 +2458,7 @@ div[data-testid="stTextInput"] input:focus {
             if st.button(
                 f"{m['icon']} {m['label']}", 
                 key=f"menu_{m['label']}", 
-                width='stretch'
+                use_container_width=True
             ):
                 st.session_state['menu_selection'] = m["label"]
                 st.rerun()
@@ -2718,7 +2718,7 @@ div[data-testid="stTextInput"] input:focus {
                     
                     
                     if media_type == "image" and media_url:
-                        st.image(media_url, width='stretch', caption=title)
+                        st.image(media_url, caption=title, use_container_width=True)
                     elif media_type == "video" and media_url:
                         st.video(media_url)
                     else:
@@ -3279,7 +3279,7 @@ div[data-testid="stHorizontalBlock"]:has(button) button:active {
             with col_a:
                 if i < len(quick_questions):   
                         
-                    if st.button(quick_questions[i], key=f"quick_{i}", width='stretch'):
+                    if st.button(quick_questions[i], key=f"quick_{i}", use_container_width=True):
                         
                         question = quick_questions[i]
                         # Generate answer using AI or fallback
@@ -3308,7 +3308,7 @@ div[data-testid="stHorizontalBlock"]:has(button) button:active {
             
             with col_b:
                 if i+1 < len(quick_questions):
-                    if st.button(quick_questions[i+1], key=f"quick_{i+1}", width='stretch'):
+                    if st.button(quick_questions[i+1], key=f"quick_{i+1}", use_container_width=True):
                         question = quick_questions[i+1].replace("🤖 ", "").replace("🪐 ", "").replace("🌙 ", "").replace("🛸 ", "").replace("⭐ ", "")
                         
                         if st.session_state.get('ai_enabled', False):
@@ -3372,7 +3372,7 @@ div[data-testid="stHorizontalBlock"]:has(button) button:active {
         with col_submit:
             button_text = "Get Your Answer!" if st.session_state.get('ai_enabled', False) else "🚀 Get Your Answer!"
   
-            if st.button(button_text, width='stretch', type="primary"):
+            if st.button(button_text, type="primary", use_container_width=True):
                 if user_question:
                     if st.session_state.get('ai_enabled', False):
                         with st.spinner("🔮 The Oracle is processing your question..."):
@@ -3399,7 +3399,7 @@ div[data-testid="stHorizontalBlock"]:has(button) button:active {
             
         
         with col_clear:
-            if st.button("🗑️ Clear", width='stretch'):
+            if st.button("🗑️ Clear", use_container_width=True):
                 st.session_state.chat_history = []
                 st.session_state.input_counter += 1
                 st.rerun()
