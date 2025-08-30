@@ -7,6 +7,7 @@ from timezonefinder import TimezoneFinder
 from streamlit_js_eval import streamlit_js_eval
 import pandas as pd
 import requests
+from io import BytesIO
 import os
 import plotly.graph_objects as go
 import numpy as np
@@ -987,9 +988,19 @@ def inject_stellaris_css():
 
     </style>
     """, unsafe_allow_html=True)
-import streamlit as st
-
-import streamlit as st
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_image_bytes(url: str) -> bytes | None:
+    try:
+        r = requests.get(
+            url,
+            timeout=15,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; Stellaris/1.0)"},
+            stream=True,
+        )
+        r.raise_for_status()
+        return BytesIO(r.content).getvalue()
+    except Exception:
+        return None
 
 def display_planet_visibility(astronomy_data, location_name):
     """Display real planet visibility cards based on actual astronomical calculations"""
@@ -2743,30 +2754,43 @@ div[data-testid="stTextInput"] input:focus {
                     media_url = apod.get('url', '')
                     media_type = apod.get('media_type', 'image')
                     
-                    # Try to display the image/video
+                    # Try to display the image/video (robust CORS-safe version)
                     try:
                         if media_type == "image" and media_url:
-                            # Direct image display
-                            st.image(media_url, use_container_width=True)
-                        elif media_type == "video":
-                            # For videos, try thumbnail first
-                            thumb_url = apod.get('thumbnail_url', '')
-                            if thumb_url:
-                                st.image(thumb_url, caption="Video Thumbnail", use_container_width=True)
-                                st.info("📹 Today's APOD is a video")
+                            # Try HD first (if you set media_url = apod.get("hdurl") or apod.get("url") earlier)
+                            img_bytes = fetch_image_bytes(media_url)
+                            if not img_bytes:
+                                # fallback to APOD thumbnail when available (e.g., video days or blocked host)
+                                thumb_url = apod.get("thumbnail_url") or apod.get("url")
+                                if thumb_url:
+                                    img_bytes = fetch_image_bytes(thumb_url)
+                    
+                            if img_bytes:
+                                st.image(img_bytes, caption=title, use_container_width=True)
                             else:
-                                st.info("📹 Today's APOD is a video (preview unavailable)")
-                            
-                            # Provide link to video
-                            if media_url:
-                                st.markdown(f"**[▶️ Watch Video]({media_url})**")
+                                st.warning("Could not load the APOD image inline.")
+                                st.markdown(f"[View on NASA]({media_url})")
+                    
+                        elif media_type == "video":
+                            thumb_url = apod.get("thumbnail_url", "")
+                            if any(h in (media_url or "") for h in ("youtube.com", "youtu.be", "vimeo.com")):
+                                st.video(media_url)
+                            else:
+                                # Non-embeddable video → try thumbnail bytes, then link
+                                thumb_bytes = fetch_image_bytes(thumb_url) if thumb_url else None
+                                if thumb_bytes:
+                                    st.image(thumb_bytes, caption="Video Thumbnail", use_container_width=True)
+                                st.info("📹 Today's APOD is a video")
+                                if media_url:
+                                    st.markdown(f"**[▶️ Watch Video]({media_url})**")
+                    
                         else:
-                            st.warning("Media could not be displayed")
+                            st.warning("Media could not be displayed.")
                             if media_url:
                                 st.markdown(f"[View on NASA]({media_url})")
-                                
+                    
                     except Exception as img_error:
-                        st.error(f"Could not display image: {str(img_error)[:100]}")
+                        st.error(f"Could not display media: {str(img_error)[:100]}")
                         if media_url:
                             st.markdown(f"[View on NASA]({media_url})")
                     
