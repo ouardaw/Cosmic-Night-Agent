@@ -3123,18 +3123,14 @@ div[data-testid="stTextInput"] input:focus {
         # AI Q&A Section
         st.markdown("""
         <div class='cosmic-card'>
-            <h2 style='text-align: center; 
-            font-family: Orbitron, sans-serif;
-            background: linear-gradient(90deg, #f59e0b, #7c3aed);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;'>
-            🔮 Ask the Cosmic Oracle
-        </h2>
-    <p style='text-align: center; opacity: 0.8;'>
-        Access the Galactic Archives.<br>
-        Submit your inquiry. The Cosmic Oracle will provide an immediate answer!
-    </p>
-    </div>
+            <h2 class="gradient-text" style='text-align: center; font-family: Orbitron, sans-serif;'>
+                🔮 Ask the Cosmic Oracle
+            </h2>
+            <p style='text-align: center; opacity: 0.8;'>
+                Access the Galactic Archives.<br>
+                Submit your inquiry. The Cosmic Oracle will provide an immediate answer!
+            </p>
+        </div>
     """, unsafe_allow_html=True)
         
         # Chat history
@@ -3191,24 +3187,21 @@ div[data-testid="stTextInput"] input:focus {
         </style>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div style='
-        background: linear-gradient(135deg, rgba(124,58,237,0.2), rgba(58,134,255,0.15));
-        border: 2px solid rgba(124,58,237,0.5);
-        border-radius: 16px;
-        padding: 1rem;
-        margin-bottom: 1.5rem;
-        text-align: center;
-        '>
-        <h3 style='
-            font-family: Orbitron, sans-serif;
-            background: linear-gradient(90deg, #f59e0b, #7c3aed, #3a86ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin: 0;
-            font-size: 1.3rem;
-            letter-spacing: 0.1em;
-        '>✨ QUICK COSMIC QUERIES ✨</h3>
-        </div>
+            <div style='
+                background: linear-gradient(135deg, rgba(124,58,237,0.2), rgba(58,134,255,0.15));
+                border: 2px solid rgba(124,58,237,0.5);
+                border-radius: 16px;
+                padding: 1rem;
+                margin-bottom: 1.5rem;
+                text-align: center;
+            '>
+                <h3 class="gradient-text" style='
+                    font-family: Orbitron, sans-serif;
+                    margin: 0;
+                    font-size: 1.3rem;
+                    letter-spacing: 0.1em;
+                '>✨ QUICK COSMIC QUERIES ✨</h3>
+            </div>
         """, unsafe_allow_html=True)
         
         if st.session_state.get('ai_enabled', False):
@@ -3373,6 +3366,7 @@ div[data-testid="stHorizontalBlock"]:has(button) button:active {
                         st.rerun()
         # Custom question input
         st.markdown("---")
+
         st.markdown("""
         <div style='
         background: linear-gradient(135deg, rgba(124,58,237,0.2), rgba(58,134,255,0.15));
@@ -3381,14 +3375,15 @@ div[data-testid="stHorizontalBlock"]:has(button) button:active {
         padding: 1rem;
         margin-bottom: 1.5rem;
         text-align: center;
-                    '>
-                   <h3 class="gradient-text" style='
-                font-family: Orbitron, sans-serif;
-                margin: 0;
-                font-size: 1.3rem;
-            '>🔮 Ask The Cosmic Oracle: 🔮</h3>
-        </div>
-        """, unsafe_allow_html=True)
+    '>
+        <h3 class="gradient-text" style='
+            font-family: Orbitron, sans-serif;
+            margin: 0;
+            font-size: 1.3rem;
+            letter-spacing: 0.1em;
+        '>🔮 Ask The Cosmic Oracle: 🔮</h3>
+    </div>
+""", unsafe_allow_html=True)
         
         if 'input_counter' not in st.session_state:
             st.session_state.input_counter = 0
