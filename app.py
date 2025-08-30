@@ -487,7 +487,32 @@ def inject_stellaris_css():
         inset 0 -12px 44px #7c3aed33;
     filter: brightness(1.20);
 }
-    .cosmic-label {
+
+    /* Gradient text that works in Chrome, Firefox, Safari */
+    .gradient-text {
+      color: #eab308; /* fallback visible everywhere */
+      background: linear-gradient(90deg, #f59e0b, #7c3aed, #3a86ff);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    /* If a browser doesn't support background-clip:text, keep solid color */
+    @supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+      .gradient-text {
+        background: none !important;
+        -webkit-text-fill-color: initial !important;
+        color: #eab308 !important;
+      }
+    }
+    
+    /* (Optional) Avoid rare Chrome issues: no filters on gradient-text containers */
+    .gradient-container {
+      /* remove filter/opacity on the container that holds gradient text */
+      filter: none !important;
+      opacity: 1 !important;
+    }
+        .cosmic-label {
         font-size: 1.1rem;
         opacity: 0.8;
         margin-bottom: 0.3em;
@@ -2672,13 +2697,11 @@ div[data-testid="stTextInput"] input:focus {
         """, unsafe_allow_html=True)
         st.markdown("<div class='cosmic-section'>💡 Cosmic Fact of the Day</div>", unsafe_allow_html=True)
         st.markdown(f"""
-                 <div class='cosmic-card'>
-                  <div style='font-family: Orbitron, sans-serif;
-                          background: linear-gradient(90deg, #ffb800, #7c3aed);
-                          -webkit-background-clip: text;
-                          -webkit-text-fill-color: transparent;'>{cosmic_fun_fact()}</div>
+                  <div class='cosmic-card'>
+                    <div class="gradient-text" style='font-family: Orbitron, sans-serif;'>
+                      {cosmic_fun_fact()}
                     </div>
-            </div>
+                  </div>
         """, unsafe_allow_html=True)
        
         # NASA Picture of the Day
@@ -2712,18 +2735,23 @@ div[data-testid="stTextInput"] input:focus {
                         st.caption(f"📅 {date}")
                     
                     # Display media
-                    media_url = apod.get('url', '')
-                    media_type = apod.get('media_type', 'image')
-                 
+                    url = f"https://api.nasa.gov/planetary/apod?api_key={NASA_API_KEY}&thumbs=true"
                     
+                    media_url  = apod.get('url', '')
+                    media_type = apod.get('media_type', 'image')
+                    thumb_url  = apod.get('thumbnail_url')
                     
                     if media_type == "image" and media_url:
                         st.image(media_url, caption=title, use_container_width=True)
                     elif media_type == "video" and media_url:
-                        st.video(media_url)
+                        if any(h in media_url for h in ("youtube.com", "youtu.be", "vimeo.com")):
+                            st.video(media_url)
+                        else:
+                            if thumb_url:
+                                st.image(thumb_url, caption=title, use_container_width=True)
+                            st.link_button("Open APOD Video", media_url)
                     else:
-                        st.info("Media type not supported or unavailable")
-                    
+                        st.info("Media type not supported or unavailable today.")
                 
                     
                     # Copyright info if available
@@ -2738,13 +2766,12 @@ div[data-testid="stTextInput"] input:focus {
                     explanation = apod.get('explanation', 'No description available')
                     
                     # Create a scrollable container for long descriptions
+                    # Around lines 2741–2751
                     st.markdown(f"""
                         <div style='background: rgba(131,56,236,0.1);
                                    border: 1px solid rgba(131,56,236,0.3);
                                    border-radius: 10px;
                                    padding: 1rem;
-                                   max-height: 400px;
-                                   overflow-y: auto;
                                    line-height: 1.6;'>
                             {explanation}
                         </div>
@@ -3343,16 +3370,12 @@ div[data-testid="stHorizontalBlock"]:has(button) button:active {
         padding: 1rem;
         margin-bottom: 1.5rem;
         text-align: center;
-        '>
-        <h3 style='
-            font-family: Orbitron, sans-serif;
-            background: linear-gradient(90deg, #f59e0b, #7c3aed, #3a86ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin: 0;
-            font-size: 1.3rem;
-            letter-spacing: 0.1em;
-        '>🔮 Ask The Cosmic Oracle: 🔮</h3>
+                    '>
+                   <h3 class="gradient-text" style='
+                font-family: Orbitron, sans-serif;
+                margin: 0;
+                font-size: 1.3rem;
+            '>🔮 Ask The Cosmic Oracle: 🔮</h3>
         </div>
         """, unsafe_allow_html=True)
         
