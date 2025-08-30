@@ -7,12 +7,11 @@ From tracking visible planets to checking ISS crew updates and stargazing condit
 
 ## ✨ Features
 
-- 🔭 **Planet Visibility Tracker** – See which planets are visible tonight from your location, with rise/set times.  
-- 🌙 **Moon Phase & Illumination** – Real-time lunar phase display.  
-- ☁️ **Weather Integration** – Check cloud cover, visibility, and stargazing conditions.  
-- 🛰 **ISS Live Crew** – See who’s currently aboard the International Space Station.  
-- 🪐 **Astronomy Fun Facts** – Daily cosmic insights and events.  
-- 🤖 **AI-Powered Q&A (optional)** – Ask astronomy questions powered by LangChain + OpenAI.  
+- 🔭 Real-time visible planets and constellations
+- 🛸 ISS pass predictions with world map tracking
+- 🌤️ Weather conditions for stargazing
+- 🤖 AI-powered astronomy Q&A (with OpenAI)
+- 📍 Works for any city worldwide
 
 ---
 
