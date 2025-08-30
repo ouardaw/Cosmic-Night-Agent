@@ -4,13 +4,21 @@ Save this as src/weather_debug.py for testing
 """
 
 import os
+import streamlit as st
 import requests
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 
 # Load environment variables with explicit path
-load_dotenv(dotenv_path="/Users/ouardawilson/Desktop/ML_projects/Night_Sky_Agent_Project/.env")
+import os
+
+# Try to load from .env for local development
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 def get_weather_forecast(lat: float, lon: float) -> Dict[str, Any]:
     """
@@ -18,7 +26,7 @@ def get_weather_forecast(lat: float, lon: float) -> Dict[str, Any]:
     """
     
     # Get API key from environment
-    api_key = os.getenv('OPENWEATHER_API_KEY')
+    api_key = os.getenv("OPENWEATHER_API_KEY") or st.secrets.get("OPENWEATHER_API_KEY", None)
     
     print(f"DEBUG: API Key loaded: {api_key is not None}")
     print(f"DEBUG: API Key length: {len(api_key) if api_key else 0}")
