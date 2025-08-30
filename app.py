@@ -33,20 +33,29 @@ else:
 
 # Load environment variables
 # This works both locally (.env) and on Streamlit Cloud (secrets)
-import os
-
-# Try to load from .env for local development
 try:
     from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # dotenv not available in deployment
+    load_dotenv()  # reads .env in project root
+except Exception:
+    pass
+    
+def read_secret(name: str, default=None):
+    # 1) Try env var (works in Codespaces / local with .env)
+    v = os.getenv(name)
+    if v and v.strip():
+        return v.strip()
+    # 2) Try Streamlit Cloud secrets (works on Cloud)
+    try:
+        v = st.secrets[name]  # bracket access is safest across versions
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    except Exception:
+        pass
+    return default
 
-# Access keys (works for both local and deployed)
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY") or st.secrets.get("OPENWEATHER_API_KEY", None)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", None)
-NASA_API_KEY = os.getenv("NASA_API_KEY") or st.secrets.get("NASA_API_KEY", None)
-
+OPENWEATHER_API_KEY = read_secret("OPENWEATHER_API_KEY")
+NASA_API_KEY        = read_secret("NASA_API_KEY", "DEMO_KEY")  # public fallback
+OPENAI_API_KEY      = read_secret("OPENAI_API_KEY") 
 
 class AstronomyQueryProcessor:
     """Enhanced astronomy query processor with LangChain LLM capabilities"""
