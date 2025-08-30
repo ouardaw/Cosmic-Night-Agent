@@ -58,6 +58,27 @@ OPENWEATHER_API_KEY = read_secret("OPENWEATHER_API_KEY")
 NASA_API_KEY        = read_secret("NASA_API_KEY", "DEMO_KEY")  # public fallback
 OPENAI_API_KEY      = read_secret("OPENAI_API_KEY") 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_image_bytes(url: str) -> bytes | None:
+    if not url:
+        return None
+    try:
+        r = requests.get(
+            url,
+            timeout=20,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; Stellaris/1.0)",
+                "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                "Referer": "https://apod.nasa.gov/",
+            },
+            allow_redirects=True,
+            stream=True,
+        )
+        r.raise_for_status()
+        content = r.content
+        return BytesIO(content).getvalue() if content else None
+    except Exception:
+        return None
 class AstronomyQueryProcessor:
     """Enhanced astronomy query processor with LangChain LLM capabilities"""
 
@@ -988,19 +1009,7 @@ def inject_stellaris_css():
 
     </style>
     """, unsafe_allow_html=True)
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_image_bytes(url: str) -> bytes | None:
-    try:
-        r = requests.get(
-            url,
-            timeout=15,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; Stellaris/1.0)"},
-            stream=True,
-        )
-        r.raise_for_status()
-        return BytesIO(r.content).getvalue()
-    except Exception:
-        return None
+
 
 def display_planet_visibility(astronomy_data, location_name):
     """Display real planet visibility cards based on actual astronomical calculations"""
@@ -2751,48 +2760,53 @@ div[data-testid="stTextInput"] input:focus {
                         st.caption(f"📅 {date}")
                     
                     # Display media - SIMPLIFIED LOGIC
-                    media_url = apod.get('url', '')
-                    media_type = apod.get('media_type', 'image')
+                    title      = apod.get("title", "Astronomy Picture of the Day")
+                    media_type = apod.get("media_type", "image")
+                    hdurl      = apod.get("hdurl")            # best when present
+                    url        = apod.get("url")              # may be image or video
+                    thumb      = apod.get("thumbnail_url")    # present when thumbs=true for video days
                     
-                    # Try to display the image/video (robust CORS-safe version)
+                    # --- quick debug; comment out after fixing ---
+                    st.caption(f"APOD debug → media_type={media_type} | hdurl={bool(hdurl)} | url={bool(url)} | thumb={bool(thumb)}")
+                    
                     try:
-                        if media_type == "image" and media_url:
-                            # Try HD first (if you set media_url = apod.get("hdurl") or apod.get("url") earlier)
-                            img_bytes = fetch_image_bytes(media_url)
-                            if not img_bytes:
-                                # fallback to APOD thumbnail when available (e.g., video days or blocked host)
-                                thumb_url = apod.get("thumbnail_url") or apod.get("url")
-                                if thumb_url:
-                                    img_bytes = fetch_image_bytes(thumb_url)
+                        if media_type == "image":
+                            # Try hdurl → url → thumb
+                            candidates = [hdurl, url, thumb]
+                            img_bytes = None
+                            for u in candidates:
+                                img_bytes = fetch_image_bytes(u)
+                                if img_bytes:
+                                    break
                     
                             if img_bytes:
                                 st.image(img_bytes, caption=title, use_container_width=True)
                             else:
                                 st.warning("Could not load the APOD image inline.")
-                                st.markdown(f"[View on NASA]({media_url})")
+                                if url:
+                                    st.markdown(f"[View on NASA]({url})")
                     
                         elif media_type == "video":
-                            thumb_url = apod.get("thumbnail_url", "")
-                            if any(h in (media_url or "") for h in ("youtube.com", "youtu.be", "vimeo.com")):
-                                st.video(media_url)
+                            # YouTube/Vimeo can be embedded; else show thumbnail + link
+                            if url and any(h in url for h in ("youtube.com", "youtu.be", "vimeo.com")):
+                                st.video(url)
                             else:
-                                # Non-embeddable video → try thumbnail bytes, then link
-                                thumb_bytes = fetch_image_bytes(thumb_url) if thumb_url else None
+                                thumb_bytes = fetch_image_bytes(thumb) if thumb else None
                                 if thumb_bytes:
-                                    st.image(thumb_bytes, caption="Video Thumbnail", use_container_width=True)
-                                st.info("📹 Today's APOD is a video")
-                                if media_url:
-                                    st.markdown(f"**[▶️ Watch Video]({media_url})**")
+                                    st.image(thumb_bytes, caption="Video thumbnail", use_container_width=True)
+                                st.info("📹 Today's APOD is a video.")
+                                if url:
+                                    st.markdown(f"**[▶️ Watch Video]({url})**")
                     
                         else:
-                            st.warning("Media could not be displayed.")
-                            if media_url:
-                                st.markdown(f"[View on NASA]({media_url})")
+                            st.info("APOD media type not supported today.")
+                            if url:
+                                st.markdown(f"[View on NASA]({url})")
                     
-                    except Exception as img_error:
-                        st.error(f"Could not display media: {str(img_error)[:100]}")
-                        if media_url:
-                            st.markdown(f"[View on NASA]({media_url})")
+                    except Exception as e:
+                        st.error(f"Could not display APOD media. {str(e)[:120]}")
+                        if url:
+                            st.markdown(f"[View on NASA]({url})")
                     
                     # Copyright info
                     copyright_info = apod.get('copyright', '')
