@@ -3363,16 +3363,13 @@ div[data-testid="stHorizontalBlock"]:has(button) button:active {
         st.markdown("---")
 
         st.markdown("""
-    <div class='cosmic-card gradient-container'>
-        <h3 class="gradient-text" style='
-            font-family: Orbitron, sans-serif;
-            margin: 0;
-            font-size: 1.3rem;
-            letter-spacing: 0.1em;text-align: center;
-        '>🔮 Ask The Cosmic Oracle: 🔮</h3>
-    </div>
-""", unsafe_allow_html=True)
-        
+                <div class='cosmic-card'>
+                  <div class="gradient-text" style="font-family: Orbitron, sans-serif; text-align:center; font-size:1.6rem; letter-spacing:.12em; margin:0;">
+                    Submit your inquiry now!
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
         if 'input_counter' not in st.session_state:
             st.session_state.input_counter = 0
         
