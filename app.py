@@ -1,5 +1,6 @@
 import streamlit as st
-from skyfield.api import load
+from skyfield.api import load, wgs84
+from skyfield import almanac
 import ephem
 import pytz
 import plotly.graph_objects as go
@@ -58,6 +59,91 @@ OPENWEATHER_API_KEY = read_secret("OPENWEATHER_API_KEY")
 NASA_API_KEY        = read_secret("NASA_API_KEY", "DEMO_KEY")  # public fallback
 OPENAI_API_KEY      = read_secret("OPENAI_API_KEY") 
 
+# === Moon utilities (Skyfield) ===
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
+def _load_eph():
+    """Load ephemeris (cached)."""
+    return load('de421.bsp')  # downloads once then caches
+
+def _tz_for(lat, lon):
+    """Return the local timezone for (lat, lon)."""
+    try:
+        tf = TimezoneFinder()
+        name = tf.timezone_at(lng=lon, lat=lat) or "UTC"
+        return pytz.timezone(name)
+    except Exception:
+        return pytz.UTC
+
+def _fmt_hhmm_local(t, tz):
+    """Format a Skyfield Time 't' in local tz as HH:MM."""
+    dt_utc = t.utc_datetime()
+    return dt_utc.astimezone(tz).strftime('%H:%M')
+
+def compute_moon_times(lat, lon, date=None):
+    """
+    Return (moonrise_str, moonset_str) in local HH:MM for the given lat/lon/date.
+    Returns None for either if no event occurs in that local day.
+    """
+    from datetime import date as _date, timedelta as _timedelta
+    if date is None:
+        date = _date.today()
+
+    eph = _load_eph()
+    ts = load.timescale()
+    # Search over the UTC span of the calendar day to catch events around midnight
+    t0 = ts.utc(date.year, date.month, date.day, 0)
+    t1 = ts.utc((date + _timedelta(days=1)).year,
+                (date + _timedelta(days=1)).month,
+                (date + _timedelta(days=1)).day, 0)
+
+    topos = wgs84.latlon(latitude_degrees=lat, longitude_degrees=lon)
+    f = almanac.risings_and_settings(eph, eph['Moon'], topos)
+    t, y = almanac.find_discrete(t0, t1, f)
+
+    tz = _tz_for(lat, lon)
+    rise_str, set_str = None, None
+    for ti, yi in zip(t, y):
+        if yi == 1 and rise_str is None:   # rising
+            rise_str = _fmt_hhmm_local(ti, tz)
+        elif yi == 0 and set_str is None:  # setting
+            set_str = _fmt_hhmm_local(ti, tz)
+    return rise_str, set_str
+
+def compute_moon_phase(date=None):
+    """
+    Return a friendly moon phase name for the given date (location not required).
+    """
+    import math as _math
+    from datetime import date as _date
+    if date is None:
+        date = _date.today()
+
+    eph = _load_eph()
+    ts = load.timescale()
+    # Noon UTC is stable for phase computations
+    t = ts.utc(date.year, date.month, date.day, 12)
+    angle_rad = almanac.moon_phase(eph, t)
+    angle = float(angle_rad.radians) * 180.0 / _math.pi
+    angle = angle % 360.0
+
+    if angle < 22.5 or angle >= 337.5:
+        return "New Moon"
+    elif angle < 67.5:
+        return "Waxing Crescent"
+    elif angle < 112.5:
+        return "First Quarter"
+    elif angle < 157.5:
+        return "Waxing Gibbous"
+    elif angle < 202.5:
+        return "Full Moon"
+    elif angle < 247.5:
+        return "Waning Gibbous"
+    elif angle < 292.5:
+        return "Last Quarter"
+    else:
+        return "Waning Crescent"
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_image_bytes(url: str) -> bytes | None:
     if not url:
@@ -1796,11 +1882,11 @@ def get_astronomy_data(lat, lon):
                 sunset_local = sunset_utc.astimezone(local_tz)
                 
                 # Moon phase calculation
-                moon_phases = ["New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous", 
-                              "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent"]
-                days_since_new_moon = (datetime.now().day % 29.53)
-                phase_index = int(days_since_new_moon / 3.69)
-                moon_phase = moon_phases[min(phase_index, 7)]
+               # Moon phase calculation (accurate via Skyfield)
+                try:
+                    moon_phase = compute_moon_phase(date=datetime.now().date())
+                except Exception:
+                    moon_phase = "Unknown"
                 
                 # Visible planets based on month
                 month = datetime.now().month
@@ -1817,8 +1903,20 @@ def get_astronomy_data(lat, lon):
                     visible_planets = visible_planets[:2]
                 
                 # Calculate moonrise/moonset (approximate)
-                moonrise_local = sunrise_local + timedelta(hours=13)
-                moonset_local = sunrise_local + timedelta(hours=1)
+                # Calculate moonrise/moonset (accurate via Skyfield)
+                try:
+                    moonrise_str, moonset_str = compute_moon_times(lat, lon, datetime.now().date())
+                    # Keep downstream code happy by turning strings into time objects when present
+                    if moonrise_str:
+                        moonrise_local = local_tz.localize(datetime.strptime(moonrise_str, "%H:%M"))
+                    else:
+                        moonrise_local = None
+                    if moonset_str:
+                        moonset_local = local_tz.localize(datetime.strptime(moonset_str, "%H:%M"))
+                    else:
+                        moonset_local = None
+                except Exception:
+                    moonrise_local, moonset_local = None, None
                 
                 return {
                     "sun": {
@@ -1826,8 +1924,8 @@ def get_astronomy_data(lat, lon):
                         "sunset": sunset_local.strftime("%H:%M")
                     },
                     "moon": {
-                        "moonrise": moonrise_local.strftime("%H:%M"),
-                        "moonset": moonset_local.strftime("%H:%M"),
+                        "moonrise": (moonrise_local.strftime("%H:%M") if moonrise_local else None),
+                        "moonset": (moonset_local.strftime("%H:%M") if moonset_local else None),
                         "phase": moon_phase
                     },
                     "planets": {
