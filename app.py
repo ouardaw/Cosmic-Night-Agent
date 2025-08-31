@@ -356,6 +356,10 @@ def inject_stellaris_css():
         background: radial-gradient(ellipse at 60% 40%, #1a1a2e 0%, #16213e 40%, #0f0f23 100%) !important;
         color: #f8fafc !important;
     }
+    /* Hide the Streamlit Cloud "Fork / GitHub" badge */
+a[data-testid="stDecoration"] {
+    display: none !important;
+}
       /* Hide Streamlit's "Running cached function" messages */
     div[data-testid="stStatusWidget"] {
         display: none !important;
