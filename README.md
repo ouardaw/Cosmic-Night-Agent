@@ -9,16 +9,17 @@ With Stellaris, the night sky isn’t just above you… it’s yours to explore.
 
 ## ✨ Features
 
+- 🌤️ Weather conditions for stargazing, Space fun fact and NASA image of the day
+  <img width="3024" height="3936" alt="home page" src="https://github.com/user-attachments/assets/c9824abc-30d1-43d4-8384-4ffbe28ee96b" />
+
 - 🔭 Real-time visible planets and constellations
-  <img width="3024" height="4928" alt="Celestial schedule " src="https://github.com/user-attachments/assets/17d1db62-585b-4bd7-a08c-242f9036aacf" />
+
+<img width="3024" height="4448" alt="screencapture-stellaris-cosmic-night-agent-streamlit-app-2025-08-31-12_18_08" src="https://github.com/user-attachments/assets/191e2546-39d8-4858-8876-187465d8cf1f" />
 
 - 🛸 ISS pass predictions with world map tracking
   <img width="3024" height="3796" alt="iss info" src="https://github.com/user-attachments/assets/a3eae9bc-8770-4107-bfa7-3897a71499c8" />
 
-- 🌤️ Weather conditions for stargazing
-  <img width="3024" height="3936" alt="home page" src="https://github.com/user-attachments/assets/c9824abc-30d1-43d4-8384-4ffbe28ee96b" />
-
-- 🤖 AI-powered astronomy Q&A (with OpenAI)
+- 🤖 AI-powered astronomy Q&A (with OpenAI and Langchain integration)
   <img width="3024" height="5098" alt="AI cosmic oracle" src="https://github.com/user-attachments/assets/072ff20a-e243-4722-8300-91236a6b5805" />
 
 - 📍 Works for any city worldwide
