@@ -7,6 +7,7 @@ from timezonefinder import TimezoneFinder
 from streamlit_js_eval import streamlit_js_eval
 import pandas as pd
 import requests
+from io import BytesIO
 import os
 import plotly.graph_objects as go
 import numpy as np
@@ -57,6 +58,27 @@ OPENWEATHER_API_KEY = read_secret("OPENWEATHER_API_KEY")
 NASA_API_KEY        = read_secret("NASA_API_KEY", "DEMO_KEY")  # public fallback
 OPENAI_API_KEY      = read_secret("OPENAI_API_KEY") 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_image_bytes(url: str) -> bytes | None:
+    if not url:
+        return None
+    try:
+        r = requests.get(
+            url,
+            timeout=20,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; Stellaris/1.0)",
+                "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                "Referer": "https://apod.nasa.gov/",
+            },
+            allow_redirects=True,
+            stream=True,
+        )
+        r.raise_for_status()
+        content = r.content
+        return BytesIO(content).getvalue() if content else None
+    except Exception:
+        return None
 class AstronomyQueryProcessor:
     """Enhanced astronomy query processor with LangChain LLM capabilities"""
 
@@ -251,6 +273,50 @@ def inject_stellaris_css():
       /* Hide Streamlit's "Running cached function" messages */
     div[data-testid="stStatusWidget"] {
         display: none !important;
+    }
+    /* Bigger, easier sidebar toggle */
+    .stApp [data-testid="collapsedControl"] { top: 8px; left: 8px; z-index: 1000; }
+    .stApp [data-testid="collapsedControl"] button { width: 48px; height: 48px; border-radius: 12px; backdrop-filter: blur(6px); }
+    .stApp [data-testid="collapsedControl"] svg { width: 28px; height: 28px; }
+    /* Ensure the container isn't hidden under Streamlit's header on mobile */
+    .block-container { padding-top: 12px; }
+    /* Bigger, easier sidebar toggle on mobile */
+    .stApp [data-testid="collapsedControl"] {
+      top: 8px;
+      left: 8px;
+      z-index: 1000;
+    }
+    .stApp [data-testid="collapsedControl"] button {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      backdrop-filter: blur(6px);
+    }
+    .stApp [data-testid="collapsedControl"] svg {
+      width: 28px;
+      height: 28px;
+    }
+    /* Prevent overlap with Streamlit header and allow wrapping */
+    .block-container { padding-top: 12px; }
+    #stellar-hero, #stellar-hero * { word-wrap: break-word; white-space: normal; }
+    
+    /* Tablet */
+    @media (max-width: 768px) {
+      #stellar-hero { padding: 1rem 0.6rem !important; margin: 0.3rem auto 0.9rem auto !important; border-radius: 18px !important; transform: perspective(900px) rotateX(1.5deg) !important; }
+      #stellar-hero .stellar-title { font-size: clamp(28px, 6.4vw, 40px) !important; letter-spacing: 0.12em !important; line-height: 1.1 !important; transform: perspective(420px) rotateY(-3deg) !important; }
+      #stellar-hero .stellar-subtitle { font-size: clamp(12px, 2.6vw, 16px) !important; letter-spacing: 0.22em !important; }
+    }
+    
+    /* Phone */
+    @media (max-width: 480px) {
+      #stellar-hero { padding: 0.9rem 0.55rem !important; border-radius: 16px !important;
+        box-shadow: 0 6px 14px rgba(0,0,0,0.4), 0 0 28px rgba(124,58,237,0.25) !important;
+        transform: perspective(780px) rotateX(1deg) !important; }
+      #stellar-hero .stellar-title { font-size: clamp(22px, 8.5vw, 32px) !important; letter-spacing: 0.08em !important; margin-bottom: 0.1em !important; line-height: 1.08 !important; }
+      #stellar-hero .stellar-subtitle { font-size: clamp(11px, 3.6vw, 14px) !important; letter-spacing: 0.16em !important; margin-top: 0 !important; }
+      #stellar-hero .sparkle { font-size: 12px !important; opacity: 0.8 !important; }
+      #stellar-hero .sparkle:nth-child(odd) { display: none; }
+      #stellar-hero .orb { transform: scale(0.7) !important; opacity: 0.85 !important; }
     }
     
     /* Hide the specific running messages */
@@ -987,9 +1053,7 @@ def inject_stellaris_css():
 
     </style>
     """, unsafe_allow_html=True)
-import streamlit as st
 
-import streamlit as st
 
 def display_planet_visibility(astronomy_data, location_name):
     """Display real planet visibility cards based on actual astronomical calculations"""
@@ -1089,6 +1153,17 @@ def get_local_now(lat, lon):
         tz_str = "UTC"
     local_tz = pytz.timezone(tz_str)
     return datetime.now(local_tz)
+
+def is_night_now(lat: float, lon: float, twilight_deg: float = -6.0):
+    """Return True if the Sun is below twilight_deg at the selected city right now."""
+    obs = ephem.Observer()
+    obs.lat, obs.lon = str(lat), str(lon)
+    # use the city's local 'now' converted to UTC (what PyEphem expects)
+    now_utc = get_local_now(lat, lon).astimezone(pytz.utc)
+    obs.date = ephem.Date(now_utc)
+    sun = ephem.Sun(); sun.compute(obs)
+    sun_alt_deg = float(sun.alt) * 180.0 / ephem.pi
+    return sun_alt_deg <= twilight_deg
 @st.cache_data(ttl=3600)
 def geocode_location(location_name: str):
     """Get coordinates for a city name with English language preference"""
@@ -1374,14 +1449,28 @@ def get_visible_constellations(lat, lon):
     observer.lat = str(lat)
     observer.lon = str(lon)
     
-    # Get sunset and sunrise times for tonight
-    sun = ephem.Sun()
-    observer.date = ephem.now()
+   # Anchor to the selected city’s local now (then convert to UTC for PyEphem)
+    now_utc = get_local_now(lat, lon).astimezone(pytz.utc)
     
-    # Find tonight's sunset
-    sunset = observer.next_setting(sun)
-    # Find tomorrow's sunrise
-    sunrise = observer.next_rising(sun, start=sunset)
+    sun = ephem.Sun()
+    observer.date = ephem.Date(now_utc)
+    sun.compute(observer)
+    
+    # Decide the "tonight" window depending on whether it's day or night now
+    if sun.alt > 0:  # daytime
+        sunset = observer.next_setting(sun, use_center=True)
+        sunrise = observer.next_rising(sun, use_center=True)
+    else:            # already night
+        sunset = observer.previous_setting(sun, use_center=True)
+        sunrise = observer.next_rising(sun, use_center=True)
+    
+    # We'll need the city's timezone for "Best at"
+    tf = TimezoneFinder()
+    tz_str = tf.timezone_at(lat=lat, lng=lon) or "UTC"
+    local_tz = pytz.timezone(tz_str)
+    
+    # Is it dark right now at the city?
+    dark_now = is_night_now(lat, lon)
     
     # Define constellations with their key stars
     constellation_data = {
@@ -1489,7 +1578,8 @@ def get_visible_constellations(lat, lon):
                     is_visible_tonight = True
                     if altitude_deg > max_altitude:
                         max_altitude = altitude_deg
-                        best_time = ephem.localtime(observer.date)
+                        dt_utc = ephem.Date(observer.date).datetime().replace(tzinfo=pytz.utc)
+                        best_time = dt_utc.astimezone(local_tz)
                 
                 # Check next hour
                 observer.date = ephem.Date(observer.date + ephem.hour)
@@ -1520,11 +1610,12 @@ def get_visible_constellations(lat, lon):
                     direction = "NW"
                 
                 # Format altitude display
-                if current_alt > 0:
+                
+                if dark_now and current_alt > 10:
                     altitude_display = f"{current_alt:.0f}° {direction} now"
                 else:
                     altitude_display = f"Rises later ({max_altitude:.0f}° max)"
-                
+                    
                 visible_constellations.append({
                     "constellation": const_name,
                     "star": const_info["star"],
@@ -1551,28 +1642,34 @@ def get_visible_constellations(lat, lon):
 
 # Alternative: Add a summary function for quick overview
 def get_constellation_summary(lat, lon):
-    """Get a quick summary of tonight's constellation viewing"""
-    
-    observer = ephem.Observer()
-    observer.lat = str(lat)
-    observer.lon = str(lon)
-    observer.date = ephem.now()
-    
-    sun = ephem.Sun()
-    sunset = observer.next_setting(sun)
-    sunset_time = ephem.localtime(sunset).strftime("%H:%M")
-    
-    # Count how many major constellations will be visible
+    """Summary that always describes TONIGHT (even in daytime), and switches wording at night."""
+    # Build full "tonight" list (sunset→sunrise at the selected city)
     visible_constellations = get_visible_constellations(lat, lon)
-    
-    currently_visible = sum(1 for c in visible_constellations if "now" in c.get('altitude', ''))
-    will_rise_later = len(visible_constellations) - currently_visible
-    
+
+    # Is it currently dark at the city?
+    dark = is_night_now(lat, lon)
+
+    # Count items marked "now" only if it's dark
+    visible_now = sum(1 for c in visible_constellations if " now" in c.get("altitude", "")) if dark else 0
+    rising_later = max(0, len(visible_constellations) - visible_now)
+
+    # Next local sunset (handy in daytime)
+    observer = ephem.Observer()
+    observer.lat, observer.lon = str(lat), str(lon)
+    observer.date = ephem.Date(get_local_now(lat, lon).astimezone(pytz.utc))
+    sun = ephem.Sun()
+    tf = TimezoneFinder()
+    tz_str = tf.timezone_at(lat=lat, lng=lon) or "UTC"
+    local_tz = pytz.timezone(tz_str)
+    next_sunset_local = ephem.Date(observer.next_setting(sun)).datetime().replace(
+        tzinfo=pytz.utc).astimezone(local_tz).strftime("%H:%M")
+
     return {
-        'sunset': sunset_time,
-        'total_tonight': len(visible_constellations),
-        'visible_now': currently_visible,
-        'rising_later': will_rise_later
+        "dark": dark,
+        "visible_now": visible_now,
+        "rising_later": rising_later,
+        "total_tonight": len(visible_constellations),
+        "sunset": next_sunset_local,
     }
 def get_city_suggestions(invalid_input):
     """Provide helpful suggestions for common city name issues"""
@@ -1916,7 +2013,36 @@ def get_iss_trajectory(minutes=90, step=1):
     lons = iss_positions.subpoint().longitude.degrees
     return lats, lons
 
+def get_user_tz(lat: float, lon: float):
+    tz = TimezoneFinder().timezone_at(lat=lat, lng=lon) or "UTC"
+    return pytz.timezone(tz)
 
+def get_local_now(lat: float, lon: float):
+    return datetime.now(get_user_tz(lat, lon))
+
+def is_night_now(lat: float, lon: float, twilight_deg: float = -6.0):
+    """True if the Sun is below twilight_deg (°) at the selected city right now."""
+    obs = ephem.Observer()
+    obs.lat, obs.lon = str(lat), str(lon)
+    now_utc = get_local_now(lat, lon).astimezone(pytz.utc)
+    obs.date = ephem.Date(now_utc)
+    sun = ephem.Sun(); sun.compute(obs)
+    sun_alt_deg = float(sun.alt) * 180.0 / ephem.pi
+    return sun_alt_deg <= twilight_deg
+
+def az_to_dir(az_deg: float):
+    dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S",
+            "SSW","SW","WSW","W","WNW","NW","NNW"]
+    i = int((az_deg % 360) / 22.5 + 0.5) % 16
+    return dirs[i]
+
+def magnitude_note(mag: float):
+    if mag <= -4:   return "Extremely bright (like Venus at peak)"
+    if mag <= -2:   return "Very bright— Easy to spot with naked eye"
+    if mag <=  0:   return "Bright"
+    if mag <=  1.5: return "Moderately bright— Needs a steady look"
+    if mag <=  3:   return "Faint— Dark skies help"
+    return "very faint"
 
 def get_iss_trajectory(minutes=90, step=1):
     """
@@ -1946,7 +2072,170 @@ def get_iss_trajectory(minutes=90, step=1):
     lats = iss_positions.subpoint().latitude.degrees
     lons = iss_positions.subpoint().longitude.degrees
     return lats, lons
+# --- Tonight's visible planets computation (sunset → sunrise for the selected city) ---
 
+PLANETS = [
+    ("Mercury", "☿", ephem.Mercury),
+    ("Venus",   "♀", ephem.Venus),
+    ("Mars",    "♂", ephem.Mars),
+    ("Jupiter", "♃", ephem.Jupiter),
+    ("Saturn",  "♄", ephem.Saturn),
+]
+
+def tonight_window(lat: float, lon: float):
+    """Return (sunset_utc, sunrise_utc, now_utc, local_tz) for the selected city."""
+    tz = get_user_tz(lat, lon)
+    now_utc = get_local_now(lat, lon).astimezone(pytz.utc)
+
+    obs = ephem.Observer()
+    obs.lat, obs.lon = str(lat), str(lon)
+    obs.date = ephem.Date(now_utc)
+
+    sun = ephem.Sun(); sun.compute(obs)
+
+    if sun.alt > 0:  # day now -> tonight is next setting to next rising
+        sunset = obs.next_setting(sun, use_center=True)
+        sunrise = obs.next_rising(sun, use_center=True)
+    else:            # night now -> tonight spans previous setting to next rising
+        sunset = obs.previous_setting(sun, use_center=True)
+        sunrise = obs.next_rising(sun, use_center=True)
+
+    return sunset, sunrise, now_utc, tz
+
+def fmt_hhmm_local(ephem_date, tz):
+    if ephem_date is None:
+        return "—"
+    dt = ephem.Date(ephem_date).datetime().replace(tzinfo=pytz.utc).astimezone(tz)
+    return dt.strftime("%H:%M")
+
+def get_visible_planets(lat: float, lon: float, min_alt_deg: float = 10.0):
+    """Return a list of dicts with tonight forecast per planet for the selected city."""
+    sunset, sunrise, now_utc, tz = tonight_window(lat, lon)
+    dark_now = is_night_now(lat, lon)
+
+    obs = ephem.Observer(); obs.lat, obs.lon = str(lat), str(lon)
+
+    results = []
+    for name, symbol, Body in PLANETS:
+        body = Body()
+
+        # Sample each hour between sunset and sunrise to find best altitude & visibility
+        obs.date = sunset
+        max_alt = -90.0
+        best_time = None
+        visible_tonight = False
+
+        # Track if up right now (for the "now" line)
+        obs.date = ephem.Date(now_utc)
+        body.compute(obs)
+        alt_now = float(body.alt) * 180.0 / ephem.pi
+        az_now  = float(body.az)  * 180.0 / ephem.pi
+        up_now = dark_now and (alt_now >= min_alt_deg)
+
+        # Hourly sweep for tonight
+        t = float(sunset)
+        t_end = float(sunrise)
+        step = ephem.hour  # 1 hour
+        obs.date = sunset
+        while float(obs.date) < t_end + 1e-9:
+            body.compute(obs)
+            alt_deg = float(body.alt) * 180.0 / ephem.pi
+            if alt_deg >= min_alt_deg:
+                visible_tonight = True
+                if alt_deg > max_alt:
+                    max_alt = alt_deg
+                    best_time = ephem.Date(obs.date)
+            obs.date = ephem.Date(float(obs.date) + float(step))
+
+        # Get rise/set that occur *around* tonight
+        obs.date = sunset
+        try:
+            # If already up at sunset, use previous rising
+            body.compute(obs)
+            if float(body.alt) > 0:
+                rise_utc = obs.previous_rising(body, use_center=True)
+                set_utc  = obs.next_setting(body, use_center=True)
+            else:
+                rise_utc = obs.next_rising(body, use_center=True)
+                # ensure we compute set after rising
+                obs.date = rise_utc
+                set_utc  = obs.next_setting(body, use_center=True)
+        except (ephem.AlwaysUpError, ephem.NeverUpError):
+            rise_utc, set_utc = None, None
+
+        # Clamp to tonight window for display (if outside, show —)
+        # Clamp to tonight window only (strictly between sunset and sunrise)
+        def _within_tonight(d):
+            if not d:
+                return False
+            return float(sunset) <= float(d) <= float(sunrise)
+        # --- Annotated clamp helpers (put these inside get_visible_planets, near where you set rise/set) ---
+        def _within_tonight(d):
+            return bool(d) and (float(sunset) <= float(d) <= float(sunrise))
+        
+        def _annotated_local_time(d, tz):
+            """Return (text, note) where note ∈ {None, 'before sunset', 'after sunrise'}."""
+            if not d:
+                return "—", None
+            if _within_tonight(d):
+                return fmt_hhmm_local(d, tz), None
+            # Outside tonight window: label it so users understand why it wasn't shown before
+            if float(d) < float(sunset):
+                return fmt_hhmm_local(d, tz), "before sunset"
+            else:
+                return fmt_hhmm_local(d, tz), "after sunrise"
+        
+        # Build annotated strings
+        rise_text, rise_note = _annotated_local_time(rise_utc, tz)
+        set_text,  set_note  = _annotated_local_time(set_utc,  tz)
+        
+        # Keep the text and append the note in parentheses only when present
+        rise_str = rise_text if rise_text != "—" else "—"
+        set_str  = set_text  if set_text  != "—" else "—"
+        
+        # Store notes too (so UI can show them)
+        rise_note_str = f" ({rise_note})" if rise_note else ""
+        set_note_str  = f" ({set_note})"  if set_note  else ""
+        # Magnitude at best time (or at now if no best)
+        mag_val = None
+        if best_time:
+            obs.date = best_time; body.compute(obs)
+            mag_val = getattr(body, "mag", None)
+        else:
+            obs.date = ephem.Date(now_utc); body.compute(obs)
+            mag_val = getattr(body, "mag", None)
+
+        # Prepare display fields
+        # Prepare display fields
+        now_line = "Rises later"
+        if up_now:
+            now_line = f"{alt_now:.0f}° {az_to_dir(az_now)} now"
+        
+        # Only show best/max if the planet is actually visible tonight
+        best_line = fmt_hhmm_local(best_time, tz) if (visible_tonight and best_time) else "—"
+        max_alt_val = max_alt if visible_tonight else None
+        
+        # Only show magnitude if visible tonight
+        if visible_tonight and mag_val is not None:
+            mag_text = f"{mag_val:.1f} — {magnitude_note(mag_val)}"
+        else:
+            mag_text = "—"
+        
+        results.append({
+            "name": name,
+            "symbol": symbol,
+            "visible_tonight": visible_tonight,
+            "up_now": up_now,
+            "alt_now": alt_now,
+            "az_now": az_now,
+            "rise": rise_str + rise_note_str,
+            "set":  set_str  + set_note_str,
+            "best_at": best_line,
+            "max_alt": max_alt_val,
+            "mag": mag_text,
+        })
+
+    return results, dark_now, get_user_tz(lat, lon)
 def create_iss_world_map(lat, lon, minutes=90, step=1):
     """
     Create a Plotly world map showing the accurate ISS trajectory and user position.
@@ -2152,9 +2441,22 @@ def generate_cosmic_answer_fallback(question, city, lat, lon, weather, astronomy
         • Cloud Cover: {weather['current'].get('clouds', 'N/A')}%"""
 
 def main():
-    st.set_page_config(page_title="Stellaris - Cosmic Explorer", page_icon="🪐", layout="wide")
+    st.set_page_config(page_title="Stellaris - Cosmic Night Sky Agent", page_icon="🪐", layout="wide")
     # Suppress the "Running cached function" messages
-
+    st.markdown(
+        """
+        <head>
+          <meta property="og:title" content="Stellaris - Cosmic Night Sky Agent" />
+          <meta property="og:description" content="Explore the night sky in real-time 🌌. Track planets, ISS flybys, constellations & more with Stellaris." />
+          <meta property="og:url" content="https://stellaris-cosmic-night-agent.streamlit.app/" />
+          <meta property="og:type" content="website" />
+        </head>
+        """,
+        unsafe_allow_html=True
+    )
+    # --- Mobile-first CSS tweaks ---
+   
+   
     
     # Initialize with a loading state
     if 'initialized' not in st.session_state:
@@ -2182,122 +2484,84 @@ def main():
     #st.markdown('<div class="cosmic-title">STELLARIS</div>', unsafe_allow_html=True)
     # Replace your header section with this corrected version:
     inject_stellaris_css()
-    st.markdown("""
-    <div style='
-    width: 100%;
-    margin: 0.4em auto 1.1em auto;
-    padding: 1.2em 0.4em 1em 0.4em;
-    background: 
+    header_html = """
+    <div id='stellar-hero' style='
+      width: 100%;
+      margin: 0.4em auto 1.1em auto;
+      padding: 1.2em 0.4em 1em 0.4em;
+      background:
         linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #16213e 75%, #1a1a2e 100%),
         radial-gradient(ellipse at top, rgba(124,58,237,0.3), transparent 70%);
-    border-radius: 20px;
-    box-shadow:
-        0 1px 2px #7c3aed,
-        0 2px 4px #5b21b6,
-        0 4px 8px #4c1d95,
-        0 8px 16px rgba(124,58,237,0.4),
-        0 16px 32px rgba(0,0,0,0.5),
-        inset 0 1px 0 rgba(255,255,255,0.2),
-        inset 0 -1px 0 rgba(0,0,0,0.3),
-        0 0 50px rgba(124,58,237,0.3),
-        0 0 100px rgba(251,146,60,0.1);
-    text-align: center;
-    position: relative;
-    overflow: visible;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-    transform: perspective(1000px) rotateX(2deg);
-    animation: bannerFloat 6s ease-in-out infinite;
+      border-radius: 20px;
+      box-shadow:
+        0 1px 2px #7c3aed, 0 2px 4px #5b21b6, 0 4px 8px #4c1d95,
+        0 8px 16px rgba(124,58,237,0.4), 0 16px 32px rgba(0,0,0,0.5),
+        inset 0 1px 0 rgba(255,255,255,0.2), inset 0 -1px 0 rgba(0,0,0,0.3),
+        0 0 50px rgba(124,58,237,0.3), 0 0 100px rgba(251,146,60,0.1);
+      text-align: center;
+      position: relative;
+      overflow: visible;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+      transform: perspective(1000px) rotateX(2deg);
+      animation: bannerFloat 6s ease-in-out infinite;
     '>
-    <div style='
-        position: absolute;
-        top: -2px; left: -2px; right: -2px; bottom: -2px;
-        background: linear-gradient(
-            45deg,
-            #ffb800, #f59e0b, #7c3aed, #3a86ff,
-            #ffb800, #f59e0b, #7c3aed, #3a86ff
-        );
+      <div style='
+        position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2px;
+        background: linear-gradient(45deg,#ffb800,#f59e0b,#7c3aed,#3a86ff,#ffb800,#f59e0b,#7c3aed,#3a86ff);
         background-size: 400% 400%;
-        border-radius: 20px;
-        z-index: -1;
-        animation: borderGradient 8s ease infinite;
-        opacity: 0.8;
-    '></div>
-    <div class='sparkle-container'>
-        <span class='sparkle' style='left: 10%; animation-delay: 0s;'>✨</span>
-        <span class='sparkle' style='left: 20%; animation-delay: 0.5s;'>⭐</span>
-        <span class='sparkle' style='left: 30%; animation-delay: 1s;'>✨</span>
-        <span class='sparkle' style='left: 40%; animation-delay: 1.5s;'>💫</span>
-        <span class='sparkle' style='left: 50%; animation-delay: 2s;'>✨</span>
-        <span class='sparkle' style='left: 60%; animation-delay: 2.5s;'>⭐</span>
-        <span class='sparkle' style='left: 70%; animation-delay: 3s;'>✨</span>
-        <span class='sparkle' style='left: 80%; animation-delay: 3.5s;'>💫</span>
-        <span class='sparkle' style='left: 90%; animation-delay: 4s;'>✨</span>
+        border-radius: 20px; z-index: -1; animation: borderGradient 8s ease infinite; opacity: 0.8;'>
+      </div>
+    
+      <div class='sparkle-container'>
+        <span class='sparkle' style='left:10%;animation-delay:0s;'>✨</span>
+        <span class='sparkle' style='left:20%;animation-delay:0.5s;'>⭐</span>
+        <span class='sparkle' style='left:30%;animation-delay:1s;'>✨</span>
+        <span class='sparkle' style='left:40%;animation-delay:1.5s;'>💫</span>
+        <span class='sparkle' style='left:50%;animation-delay:2s;'>✨</span>
+        <span class='sparkle' style='left:60%;animation-delay:2.5s;'>⭐</span>
+        <span class='sparkle' style='left:70%;animation-delay:3s;'>✨</span>
+        <span class='sparkle' style='left:80%;animation-delay:3.5s;'>💫</span>
+        <span class='sparkle' style='left:90%;animation-delay:4s;'>✨</span>
+      </div>
+    
+      <div class='stellar-title' style="
+        font-family: 'Orbitron','Space Grotesk',sans-serif; font-size: 2.8rem; font-weight: 900; letter-spacing: 0.15em;
+        background: linear-gradient(135deg,#fff 0%,#ffea00 25%,#ffb800 50%,#ff6b00 75%,#7c3aed 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        text-shadow: 0 1px 0 #ccc, 0 2px 0 #c9c9c9, 0 3px 0 #bbb, 0 4px 0 #b9b9b9,
+                     0 5px 0 #aaa, 0 6px 1px rgba(0,0,0,.1), 0 0 5px rgba(255,184,0,0.5),
+                     0 1px 3px rgba(0,0,0,.3), 0 3px 5px rgba(0,0,0,.2),
+                     0 5px 10px rgba(0,0,0,.25), 0 10px 10px rgba(0,0,0,.2), 0 20px 20px rgba(0,0,0,.15);
+        filter: brightness(1.2); display: inline-block; margin-bottom: 0.2em; position: relative;
+        animation: titlePulse 3s ease-in-out infinite; transform: perspective(500px) rotateY(-5deg);
+      ">
+        <span style='display:inline-block;animation:letterFloat 4s ease-in-out infinite;animation-delay:0s;'>S</span>
+        <span style='display:inline-block;animation:letterFloat 4s ease-in-out infinite;animation-delay:0.1s;'>T</span>
+        <span style='display:inline-block;animation:letterFloat 4s ease-in-out infinite;animation-delay:0.2s;'>E</span>
+        <span style='display:inline-block;animation:letterFloat 4s ease-in-out infinite;animation-delay:0.3s;'>L</span>
+        <span style='display:inline-block;animation:letterFloat 4s ease-in-out infinite;animation-delay:0.4s;'>L</span>
+        <span style='display:inline-block;animation:letterFloat 4s ease-in-out infinite;animation-delay:0.5s;'>A</span>
+        <span style='display:inline-block;animation:letterFloat 4s ease-in-out infinite;animation-delay:0.6s;'>R</span>
+        <span style='display:inline-block;animation:letterFloat 4s ease-in-out infinite;animation-delay:0.7s;'>I</span>
+        <span style='display:inline-block;animation:letterFloat 4s ease-in-out infinite;animation-delay:0.8s;'>S</span>
+      </div>
+    
+      <div class='stellar-subtitle' style='
+        font-size: 1.2rem; font-family: Space Grotesk, sans-serif; color: #fff;
+        text-shadow: 0 0 10px #7c3aed, 0 0 20px #7c3aed, 0 0 30px #7c3aed, 0 0 40px #3a86ff;
+        margin-top: -0.5em; letter-spacing: 0.3em; opacity: 0.95;
+        animation: subtitleGlow 2s ease-in-out infinite alternate; text-transform: uppercase; font-weight: 300;
+      '>Cosmic Night Sky Agent</div>
+    
+      <div class='orb orb1'></div>
+      <div class='orb orb2'></div>
+      <div class='orb orb3'></div>
     </div>
-    <div style="
-        font-family: 'Orbitron', 'Space Grotesk', sans-serif;
-        font-size: 2.8rem;
-        font-weight: 900;
-        letter-spacing: 0.15em;
-        background: linear-gradient(
-            135deg,
-            #fff 0%, #ffea00 25%, #ffb800 50%, #ff6b00 75%, #7c3aed 100%
-        );
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-shadow:
-            0 1px 0 #ccc,
-            0 2px 0 #c9c9c9,
-            0 3px 0 #bbb,
-            0 4px 0 #b9b9b9,
-            0 5px 0 #aaa,
-            0 6px 1px rgba(0,0,0,.1),
-            0 0 5px rgba(255,184,0,0.5),
-            0 1px 3px rgba(0,0,0,.3),
-            0 3px 5px rgba(0,0,0,.2),
-            0 5px 10px rgba(0,0,0,.25),
-            0 10px 10px rgba(0,0,0,.2),
-            0 20px 20px rgba(0,0,0,.15);
-        filter: brightness(1.2);
-        display: inline-block;
-        margin-bottom: 0.2em;
-        position: relative;
-        animation: titlePulse 3s ease-in-out infinite;
-        transform: perspective(500px) rotateY(-5deg);
-    ">
-        <span style='display: inline-block; animation: letterFloat 4s ease-in-out infinite; animation-delay: 0s;'>S</span>
-        <span style='display: inline-block; animation: letterFloat 4s ease-in-out infinite; animation-delay: 0.1s;'>T</span>
-        <span style='display: inline-block; animation: letterFloat 4s ease-in-out infinite; animation-delay: 0.2s;'>E</span>
-        <span style='display: inline-block; animation: letterFloat 4s ease-in-out infinite; animation-delay: 0.3s;'>L</span>
-        <span style='display: inline-block; animation: letterFloat 4s ease-in-out infinite; animation-delay: 0.4s;'>L</span>
-        <span style='display: inline-block; animation: letterFloat 4s ease-in-out infinite; animation-delay: 0.5s;'>A</span>
-        <span style='display: inline-block; animation: letterFloat 4s ease-in-out infinite; animation-delay: 0.6s;'>R</span>
-        <span style='display: inline-block; animation: letterFloat 4s ease-in-out infinite; animation-delay: 0.7s;'>I</span>
-        <span style='display: inline-block; animation: letterFloat 4s ease-in-out infinite; animation-delay: 0.8s;'>S</span>
-    </div>
-    <div style='
-        font-size: 1.2rem;
-        font-family: Space Grotesk, sans-serif;
-        color: #fff;
-        text-shadow:
-            0 0 10px #7c3aed,
-            0 0 20px #7c3aed,
-            0 0 30px #7c3aed,
-            0 0 40px #3a86ff;
-        margin-top: -0.5em;
-        letter-spacing: 0.3em;
-        opacity: 0.95;
-        animation: subtitleGlow 2s ease-in-out infinite alternate;
-        text-transform: uppercase;
-        font-weight: 300;
-    '>
-        Cosmic Night Sky Agent
-    </div>
-    <div class='orb orb1'></div>
-    <div class='orb orb2'></div>
-    <div class='orb orb3'></div>
-    </div>
-    """, unsafe_allow_html=True)
+"""
+
+    # Render as HTML (CRUCIAL: unsafe_allow_html=True)
+    st.markdown(header_html, unsafe_allow_html=True)
     
     #inject_stellaris_css()
     st.markdown("""
@@ -2585,7 +2849,7 @@ div[data-testid="stTextInput"] input:focus {
     if st.session_state['menu_selection'] == "Home":
         #st.markdown("<div class='cosmic-section'>🌍 Welcome to Your Cosmic Dashboard</div>", unsafe_allow_html=True)
       
-        st.markdown("<div class='cosmic-section'>🌤️ Current Conditions</div>", unsafe_allow_html=True)
+        st.markdown("<div class='cosmic-section'>🌤️ Weather Conditions</div>", unsafe_allow_html=True)
         
         # Calculate time until sunset (keep your existing logic)
         sunset_time_str = astronomy['sun']['sunset']
@@ -2692,9 +2956,9 @@ div[data-testid="stTextInput"] input:focus {
                     </div>
                 </div>
                 <div style='margin-top: 0.5rem; font-size: 0.8rem; opacity: 0.8; text-align: center;'>
-                    {"🌟 Excellent - Deep sky objects visible!" if clouds < 30 else 
-                     "⭐ Good - Planets and bright stars visible" if clouds < 60 else 
-                     "☁️ Poor - Only brightest objects visible"}
+                    {"🌟 Excellent - Deep sky objects visible at night time!" if clouds < 30 else 
+                     "⭐ Good - Planets and bright stars visible at night time" if clouds < 60 else 
+                     "☁️ Poor - Only brightest objects visible at night time"}
                 </div>
             </div>
         """, unsafe_allow_html=True)
@@ -2729,6 +2993,7 @@ div[data-testid="stTextInput"] input:focus {
                 # Create two columns
                 col_img, col_desc = st.columns([1, 1])
                 
+                # Replace the image display section (around lines 2714-2740) with this:
                 with col_img:
                     # Display title
                     title = apod.get('title', 'NASA Astronomy Picture')
@@ -2739,34 +3004,49 @@ div[data-testid="stTextInput"] input:focus {
                     if date:
                         st.caption(f"📅 {date}")
                     
-                    # Display media - SIMPLIFIED LOGIC
+                    # Display media
                     media_url = apod.get('url', '')
                     media_type = apod.get('media_type', 'image')
                     
-                    # Try to display the image/video
-                    try:
-                        if media_type == "image" and media_url:
-                            # Direct image display
+                    if media_type == "image" and media_url:
+                        # Try multiple methods to display the image
+                        try:
+                            # Method 1: Direct display with st.image
                             st.image(media_url, use_container_width=True)
-                        elif media_type == "video":
-                            # For videos, try thumbnail first
-                            thumb_url = apod.get('thumbnail_url', '')
-                            if thumb_url:
-                                st.image(thumb_url, caption="Video Thumbnail", use_container_width=True)
-                                st.info("📹 Today's APOD is a video")
-                            else:
-                                st.info("📹 Today's APOD is a video (preview unavailable)")
-                            
-                            # Provide link to video
-                            if media_url:
-                                st.markdown(f"**[▶️ Watch Video]({media_url})**")
-                        else:
-                            st.warning("Media could not be displayed")
-                            if media_url:
-                                st.markdown(f"[View on NASA]({media_url})")
+                        except:
+                            # Method 2: If direct display fails, try with HTML
+                            try:
+                                st.markdown(f'''
+                                    <img src="{media_url}" style="width:100%; border-radius:10px;">
+                                ''', unsafe_allow_html=True)
+                            except:
+                                # Method 3: If both fail, show placeholder and link
+                                st.warning("⚠️ Image cannot be displayed directly")
+                                st.markdown(f"[🔗 View Image]({media_url})")
                                 
-                    except Exception as img_error:
-                        st.error(f"Could not display image: {str(img_error)[:100]}")
+                                # Try HD version if available
+                                hdurl = apod.get('hdurl', '')
+                                if hdurl and hdurl != media_url:
+                                    try:
+                                        st.image(hdurl, use_container_width=True)
+                                    except:
+                                        st.markdown(f"[🔍 View HD Version]({hdurl})")
+                    
+                    elif media_type == "video":
+                        # Handle video content
+                        thumb_url = apod.get('thumbnail_url', '')
+                        if thumb_url:
+                            try:
+                                st.image(thumb_url, caption="Video Thumbnail", use_container_width=True)
+                            except:
+                                st.info("📹 Today's APOD is a video")
+                        else:
+                            st.info("📹 Today's APOD is a video")
+                        
+                        if media_url:
+                            st.markdown(f"**[▶️ Watch Video]({media_url})**")
+                    else:
+                        st.info("Media unavailable")
                         if media_url:
                             st.markdown(f"[View on NASA]({media_url})")
                     
@@ -2923,26 +3203,123 @@ div[data-testid="stTextInput"] input:focus {
         
         
         #st.markdown("<div class='cosmic-section'>🪐 Planet Visibility Tracker</div>", unsafe_allow_html=True)
-        display_planet_visibility(astronomy, st.session_state.get('current_city', 'your location'))
+        #display_planet_visibility(astronomy, st.session_state.get('current_city', 'your location'))
+
+
+        # --- UI: Visible Planets Tonight ---
+
+               # ----------------------------
+        # Visible Planets (filter to tonight-only)
+        # ----------------------------
         
+        planets, planets_dark, _tz = get_visible_planets(lat, lon)
+        
+        # Keep only planets that are visible at some point TONIGHT
+        visible_planets = [p for p in planets if p["visible_tonight"]]
+        
+        visible_now   = sum(1 for p in visible_planets if p["up_now"])
+        total_tonight = len(visible_planets)
+        rising_later  = total_tonight - visible_now
+        
+        # Header/subtitle (same look as constellations)
+        if planets_dark:
+            planets_header = "🌃 Tonight's Planet Forecast"
+            planets_sub = (
+                f"<span style='color: #00ff00;'>{visible_now} visible now</span> • "
+                f"<span style='color: #ffb800;'>{rising_later} will rise later</span> • "
+                f"<span style='color: #8b5cf6;'>{total_tonight} total tonight</span>"
+            )
+        else:
+            planets_header = "🌙 Tonight's Planet Forecast"
+            planets_sub = (
+                f"<span style='color: #aaaaaa;'>0 visible now (daylight)</span> • "
+                f"<span style='color: #8b5cf6;'>{total_tonight} visible tonight</span>"
+            )
+        
+        st.markdown(f"""
+            <div class='cosmic-card' style='text-align: center; padding: 0.8rem; margin-bottom: 0.8rem;'>
+                <div style='color: #f59e0b; font-size: 1.07rem; font-weight: bold; margin-bottom: 0.28em;'>
+                    {planets_header}
+                </div>
+                <div style='font-size: 1.07rem;'>{planets_sub}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Render only planets visible tonight (same size/style as constellation cards)
+        if total_tonight == 0:
+            st.markdown("""
+                <div class='cosmic-card' style='padding: 0.6rem; text-align:center;'>
+                    No planets are visible tonight for this location.
+                </div>
+            """, unsafe_allow_html=True)
+        else:
+            cols = st.columns(2)
+            for idx, p in enumerate(visible_planets):
+                col = cols[idx % 2]
+                with col:
+                    # Left border color matches constellation logic:
+                    # green = visible now, orange = rises later
+                    if p["up_now"]:
+                        border_color = "#00ff00"
+                        position_line = f"{p['alt_now']:.0f}° {az_to_dir(p['az_now'])} now"
+                    else:
+                        border_color = "#ffb800"
+                        position_line = "Rises later"
+        
+                    best_line    = p["best_at"]                            # "HH:MM"
+                    max_alt_line = f"{p['max_alt']:.0f}°" if p["max_alt"] is not None else "—"
+                    rise_line    = p["rise"]                               # "—" if outside tonight
+                    set_line     = p["set"]                                # "—" if outside tonight
+                    mag_line     = p["mag"]                                # should be filled for visible_tonight
+        
+                    st.markdown(f"""
+                        <div class='cosmic-card' style='
+                            padding: 0.5rem;
+                            min-height: 90px;
+                            font-size: 0.98rem;
+                            border-left: 3px solid {border_color};
+                        '>
+                            <b>{p['symbol']} {p['name']}</b><br>
+                            Position: {position_line}<br>
+                            <span style='font-size:0.92rem; color:#f59e0b;'><b>Best at:</b> {best_line}</span><br>
+                            <span style='font-size:0.92rem;'>
+                                Mag: <b>{mag_line}</b>
+                            </span><br>
+                             <span style='font-size:0.92rem;'>
+                                Max alt: <b>{max_alt_line}</b>
+                            </span>
+                        </div>
+                    """, unsafe_allow_html=True)
         # Constellation section - fixed without duplication
         st.markdown("<div class='cosmic-section'>⭐ Visible Constellations Tonight</div>", unsafe_allow_html=True)
         
         const_summary = get_constellation_summary(lat, lon)
     
-    # Display summary bar
+        # Display summary bar
+            # Day vs Night wording
+        if const_summary["dark"]:
+            header = "🌃 Tonight's Constellation Forecast"
+            sub = (
+                f"<span style='color: #00ff00;'>{const_summary['visible_now']} visible now</span> • "
+                f"<span style='color: #ffb800;'>{const_summary['rising_later']} will rise later</span> • "
+                f"<span style='color: #8b5cf6;'>{const_summary['total_tonight']} total tonight</span>"
+            )
+        else:
+            header = "🌙 Tonight's Constellation Forecast"
+            sub = (
+                f"<span style='color: #aaaaaa;'>0 visible now (daylight)</span> • "
+                f"<span style='color: #8b5cf6;'>{const_summary['total_tonight']} visible tonight</span> • "
+                f"<span style='color: #ffb800;'>Sunset at {const_summary['sunset']}</span>"
+            )
+        
         st.markdown(f"""
-        <div class='cosmic-card' style='text-align: center; padding: 0.8rem; margin-bottom: 0.8rem;'>
-            <div style='color: #f59e0b; font-size: 1.07rem; font-weight: bold; margin-bottom: 0.28em;'>
-                🌃 Tonight's Constellation Forecast
+            <div class='cosmic-card' style='text-align: center; padding: 0.8rem; margin-bottom: 0.8rem;'>
+                <div style='color: #f59e0b; font-size: 1.07rem; font-weight: bold; margin-bottom: 0.28em;'>
+                    {header}
+                </div>
+                <div style='font-size: 1.07rem;'>{sub}</div>
             </div>
-            <div style='font-size: 1.07rem;'> 
-                <span style='color: #00ff00;'>{const_summary['visible_now']} visible now</span> • 
-                <span style='color: #ffb800;'>{const_summary['rising_later']} will rise later</span> • 
-                <span style='color: #8b5cf6;'>{const_summary['total_tonight']} total tonight</span>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
         
         # Display constellations
         visible_constellations = get_visible_constellations(lat, lon)
