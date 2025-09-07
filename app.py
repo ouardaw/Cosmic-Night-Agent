@@ -3262,10 +3262,7 @@ div[data-testid="stTextInput"] input:focus {
         # Display the alert box
         current_time = datetime.now()
         next_event, hours_until, mins_until = get_next_event(astronomy, current_time, lat, lon)
-        if not next_event:
-            st.info("🌙 Next moonrise/moonset time isn’t available from the data source right now.")
-        else:
-            st.markdown(f"**Next {next_event}** in {int(hours_until)}h {int(mins_until)}m")
+        
         
         # Determine if it's a good time for stargazing
         hour = current_time.hour
