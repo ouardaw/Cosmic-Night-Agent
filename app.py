@@ -81,6 +81,27 @@ def _fmt_hhmm_local(t, tz):
     dt_utc = t.utc_datetime()
     return dt_utc.astimezone(tz).strftime('%H:%M')
 
+
+def _hhmm_to_minutes_safe(s: str | None) -> int | None:
+    """Return minutes since midnight, or None if s is missing/invalid."""
+    if s is None:
+        return None
+    s = str(s).strip()
+    if s in {"—", "-", "–", "N/A", "", "None"}:
+        return None
+    # Try 24h HH:MM
+    try:
+        h, m = map(int, s.split(":"))
+        if 0 <= h < 24 and 0 <= m < 60:
+            return h * 60 + m
+    except Exception:
+        pass
+    # Try 12h like "7:03 AM"
+    try:
+        t = datetime.strptime(s, "%I:%M %p").time()
+        return t.hour * 60 + t.minute
+    except Exception:
+        return None
 def compute_moon_times(lat, lon, date=None):
     """
     Return (moonrise_str, moonset_str) in local HH:MM for the given lat/lon/date.
@@ -3204,53 +3225,52 @@ div[data-testid="stTextInput"] input:focus {
       
         
         # What's Up Right Now Alert Box
-        def get_next_event(astronomy, current_time, lat, lon):
- 
-            events = []
-            
-            # Get local timezone-aware current time
-            local_now = get_local_now(lat, lon)
-            
-            # Parse sunset/sunrise times with local timezone
-            sunset_hour, sunset_min = map(int, astronomy['sun']['sunset'].split(':'))
-            sunrise_hour, sunrise_min = map(int, astronomy['sun']['sunrise'].split(':'))
-            
-            sunset_time = local_now.replace(hour=sunset_hour, minute=sunset_min, second=0, microsecond=0)
-            sunrise_time = local_now.replace(hour=sunrise_hour, minute=sunrise_min, second=0, microsecond=0)
-            
-            # Handle day transitions
-            if sunset_time < local_now:
-                sunset_time += timedelta(days=1)
-            
-            if sunrise_time < local_now:
-                sunrise_time += timedelta(days=1)
-            
-            # Moonrise
-            moonrise_hour, moonrise_min = map(int, astronomy['moon']['moonrise'].split(':'))
-            moonrise_time = local_now.replace(hour=moonrise_hour, minute=moonrise_min, second=0, microsecond=0)
-            if moonrise_time < local_now:
-                moonrise_time += timedelta(days=1)
-            
-            # Collect events
-            events.append(("🌅 Sunset", sunset_time))
-            events.append(("🌙 Moonrise", moonrise_time))
-            events.append(("☀️ Sunrise", sunrise_time))
-            
-            # Find next event
-            events.sort(key=lambda x: x[1])
-            for event_name, event_time in events:
-                if event_time > local_now:
-                    time_diff = event_time - local_now
-                    hours = time_diff.seconds // 3600
-                    minutes = (time_diff.seconds % 3600) // 60
-                    return event_name, hours, minutes
-            
-            return "No events", 0, 0
+        def get_next_event(astronomy: dict, now_dt, lat: float, lon: float):
+    """
+            Decide the next lunar event (rise/set) relative to 'now_dt'.
+            Returns: (label, hours_until, mins_until) or (None, None, None) if unknown.
+            """
+            # Defensive dict access
+            moon = (astronomy or {}).get("moon") or {}
+
+            rise_str = moon.get("moonrise")
+            set_str  = moon.get("moonset")
+
+            rise_min = _hhmm_to_minutes_safe(rise_str)
+            set_min  = _hhmm_to_minutes_safe(set_str)
+
+            # Current minutes since midnight
+            now_min = now_dt.hour * 60 + now_dt.minute
+            day = 24 * 60
+
+            # If neither is valid, we can't compute a next event
+            if rise_min is None and set_min is None:
+                return None, None, None
+
+            candidates = []
+            if rise_min is not None:
+                # time delta in minutes, modulo 24h, always non-negative
+                delta = (rise_min - now_min) % day
+                candidates.append(("Moonrise", delta))
+            if set_min is not None:
+                delta = (set_min - now_min) % day
+                candidates.append(("Moonset", delta))
+
+            # Pick the soonest upcoming event
+            label, delta = min(candidates, key=lambda x: x[1])
+            hours_until, mins_until = divmod(delta, 60)
+            return label, hours_until, mins_until
        
         
         # Display the alert box
+        if not isinstance(astronomy, dict) or "moon" not in astronomy:
+            st.warning("Moon data unavailable; showing partial results.")
         current_time = datetime.now()
         next_event, hours_until, mins_until = get_next_event(astronomy, current_time, lat, lon)
+        if not next_event:
+            st.info("🌙 Next moonrise/moonset time isn’t available from the data source right now.")
+        else:
+            st.markdown(f"**Next {next_event}** in {int(hours_until)}h {int(mins_until)}m")
         
         # Determine if it's a good time for stargazing
         hour = current_time.hour
