@@ -2037,6 +2037,37 @@ def get_iss_passes(lat, lon, city_name=""):
             "message": "ISS data temporarily unavailable"
         }]
 # --- Add the ISS visibility functions near your other utility functions (after get_iss_passes, before cosmic_fun_fact) ---
+def get_next_event(astronomy: dict, now_dt, lat: float, lon: float):
+ 
+            # Defensive dict access
+            moon = (astronomy or {}).get("moon") or {}
+            rise_str = moon.get("moonrise")
+            set_str  = moon.get("moonset")
+
+            rise_min = _hhmm_to_minutes_safe(rise_str)
+            set_min  = _hhmm_to_minutes_safe(set_str)
+
+            # Current minutes since midnight
+            now_min = now_dt.hour * 60 + now_dt.minute
+            day = 24 * 60
+
+            # If neither is valid, we can't compute a next event
+            if rise_min is None and set_min is None:
+                return None, None, None
+
+            candidates = []
+            if rise_min is not None:
+                # time delta in minutes, modulo 24h, always non-negative
+                delta = (rise_min - now_min) % day
+                candidates.append(("Moonrise", delta))
+            if set_min is not None:
+                delta = (set_min - now_min) % day
+                candidates.append(("Moonset", delta))
+
+            # Pick the soonest upcoming event
+            label, delta = min(candidates, key=lambda x: x[1])
+            hours_until, mins_until = divmod(delta, 60)
+            return label, hours_until, mins_until
 def get_iss_crew():
     """Get current ISS crew members"""
     try:
@@ -3225,46 +3256,10 @@ div[data-testid="stTextInput"] input:focus {
       
         
         # What's Up Right Now Alert Box
-        def get_next_event(astronomy: dict, now_dt, lat: float, lon: float):
-    """
-            Decide the next lunar event (rise/set) relative to 'now_dt'.
-            Returns: (label, hours_until, mins_until) or (None, None, None) if unknown.
-            """
-            # Defensive dict access
-            moon = (astronomy or {}).get("moon") or {}
-
-            rise_str = moon.get("moonrise")
-            set_str  = moon.get("moonset")
-
-            rise_min = _hhmm_to_minutes_safe(rise_str)
-            set_min  = _hhmm_to_minutes_safe(set_str)
-
-            # Current minutes since midnight
-            now_min = now_dt.hour * 60 + now_dt.minute
-            day = 24 * 60
-
-            # If neither is valid, we can't compute a next event
-            if rise_min is None and set_min is None:
-                return None, None, None
-
-            candidates = []
-            if rise_min is not None:
-                # time delta in minutes, modulo 24h, always non-negative
-                delta = (rise_min - now_min) % day
-                candidates.append(("Moonrise", delta))
-            if set_min is not None:
-                delta = (set_min - now_min) % day
-                candidates.append(("Moonset", delta))
-
-            # Pick the soonest upcoming event
-            label, delta = min(candidates, key=lambda x: x[1])
-            hours_until, mins_until = divmod(delta, 60)
-            return label, hours_until, mins_until
+        
        
         
         # Display the alert box
-        if not isinstance(astronomy, dict) or "moon" not in astronomy:
-            st.warning("Moon data unavailable; showing partial results.")
         current_time = datetime.now()
         next_event, hours_until, mins_until = get_next_event(astronomy, current_time, lat, lon)
         if not next_event:
