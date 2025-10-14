@@ -3126,7 +3126,7 @@ div[data-testid="stTextInput"] input:focus {
         """, unsafe_allow_html=True)
        
         # NASA Picture of the Day
-        st.markdown("<div class='cosmic-section'>📸 NASA Astronomy Picture of the Day</div>", unsafe_allow_html=True)
+        #st.markdown("<div class='cosmic-section'>📸 NASA Astronomy Picture of the Day</div>", unsafe_allow_html=True)
         
         # NASA Picture of the Day
         #st.markdown("<div class='cosmic-section'>📸 NASA Astronomy Picture of the Day</div>", unsafe_allow_html=True)
