@@ -3132,121 +3132,129 @@ div[data-testid="stTextInput"] input:focus {
         #st.markdown("<div class='cosmic-section'>📸 NASA Astronomy Picture of the Day</div>", unsafe_allow_html=True)
         
         try:
-            NASA_API_KEY = read_secret("NASA_API_KEY", "DEMO_KEY")
-            url = f"https://api.nasa.gov/planetary/apod?api_key={NASA_API_KEY}&thumbs=true"
-            
-            response = requests.get(url, timeout=10)
-            
-            if response.status_code == 200:
-                apod = response.json()
-                
-                # Debug: Show what we're getting
-                if st.session_state.get('debug_mode', False):
-                    st.json(apod)
-                
-                # Create two columns
-                col_img, col_desc = st.columns([1, 1])
-                
-                # Replace the image display section (around lines 2714-2740) with this:
-                with col_img:
-                    # Display title
-                    title = apod.get('title', 'NASA Astronomy Picture')
-                    st.markdown(f"<h3 style='color: #f59e0b;'>{title}</h3>", unsafe_allow_html=True)
-                    
-                    # Display date
-                    date = apod.get('date', '')
-                    if date:
-                        st.caption(f"📅 {date}")
-                    
-                    # Display media
-                    media_url = apod.get('url', '')
-                    media_type = apod.get('media_type', 'image')
-                    
-                    if media_type == "image" and media_url:
-                        # Try multiple methods to display the image
-                        try:
-                            # Method 1: Direct display with st.image
-                            st.image(media_url, use_container_width=True)
-                        except:
-                            # Method 2: If direct display fails, try with HTML
-                            try:
-                                st.markdown(f'''
-                                    <img src="{media_url}" style="width:100%; border-radius:10px;">
-                                ''', unsafe_allow_html=True)
-                            except:
-                                # Method 3: If both fail, show placeholder and link
-                                st.warning("⚠️ Image cannot be displayed directly")
-                                st.markdown(f"[🔗 View Image]({media_url})")
-                                
-                                # Try HD version if available
-                                hdurl = apod.get('hdurl', '')
-                                if hdurl and hdurl != media_url:
-                                    try:
-                                        st.image(hdurl, use_container_width=True)
-                                    except:
-                                        st.markdown(f"[🔍 View HD Version]({hdurl})")
-                    
-                    elif media_type == "video":
-                        # Handle video content
-                        thumb_url = apod.get('thumbnail_url', '')
-                        if thumb_url:
-                            try:
-                                st.image(thumb_url, caption="Video Thumbnail", use_container_width=True)
-                            except:
-                                st.info("📹 Today's APOD is a video")
-                        else:
-                            st.info("📹 Today's APOD is a video")
-                        
-                        if media_url:
-                            st.markdown(f"**[▶️ Watch Video]({media_url})**")
-                    else:
-                        st.info("Media unavailable")
-                        if media_url:
-                            st.markdown(f"[View on NASA]({media_url})")
-                    
-                    # Copyright info
-                    copyright_info = apod.get('copyright', '')
-                    if copyright_info:
-                        st.caption(f"© {copyright_info}")
-                
-                with col_desc:
-                    st.markdown("<h4 style='color: #7c3aed;'>📖 Explanation</h4>", unsafe_allow_html=True)
-                    
-                    # Display explanation - SAFER METHOD
-                    explanation = apod.get('explanation', 'No description available')
-                    
-                    # Clean the explanation text to avoid HTML issues
-                    import html
-                    explanation_clean = html.escape(explanation)
-                    
-                    # Use a text area or just markdown without HTML
-                    st.markdown(f"""
-                    <div style='background: rgba(131,56,236,0.1);
-                               border: 1px solid rgba(131,56,236,0.3);
-                               border-radius: 10px;
-                               padding: 1rem;
-                               max-height: 400px;
-                               overflow-y: auto;
-                               line-height: 1.6;'>
-                        {explanation_clean}
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Alternative: Just use plain markdown (more reliable)
-                    # st.text_area("Explanation", explanation, height=300, disabled=True)
-                    
-                    # HD version link
+    import pytz
+    from datetime import datetime, timedelta
+
+    NASA_API_KEY = read_secret("NASA_API_KEY", "DEMO_KEY")
+    eastern = pytz.timezone("US/Eastern")
+
+    def fetch_apod(date_iso):
+        url = "https://api.nasa.gov/planetary/apod"
+        params = {"api_key": NASA_API_KEY, "date": date_iso, "thumbs": "true"}
+        r = requests.get(url, params=params, timeout=10)
+        try:
+            data = r.json()
+        except Exception:
+            data = {}
+        if r.status_code == 200 and ("url" in data or "thumbnail_url" in data):
+            data["_resolved_date"] = date_iso
+            return data
+        return None
+
+    # Try today first, then walk back up to 60 days
+    today_et = datetime.now(eastern).date()
+    apod = fetch_apod(today_et.isoformat())
+
+    if not apod:
+        for i in range(1, 60):
+            prev_date = (today_et - timedelta(days=i)).isoformat()
+            apod = fetch_apod(prev_date)
+            if apod:
+                break
+
+    if not apod:
+        st.warning("Unable to find a recent Astronomy Picture of the Day.")
+        st.info("Visit [apod.nasa.gov](https://apod.nasa.gov) for recent entries.")
+        st.stop()
+
+    # Debug
+    if st.session_state.get('debug_mode', False):
+        st.json(apod)
+
+    # Create two columns
+    col_img, col_desc = st.columns([1, 1])
+
+    with col_img:
+        title = apod.get('title', 'NASA Astronomy Picture')
+        st.markdown(f"<h3 style='color: #f59e0b;'>{title}</h3>", unsafe_allow_html=True)
+
+        date = apod.get('date', '')
+        if date:
+            st.caption(f"📅 {date}")
+
+        media_url = apod.get('url', '')
+        media_type = apod.get('media_type', 'image')
+
+        if media_type == "image" and media_url:
+            try:
+                st.image(media_url, use_container_width=True)
+            except:
+                try:
+                    st.markdown(f'<img src="{media_url}" style="width:100%; border-radius:10px;">', unsafe_allow_html=True)
+                except:
+                    st.warning("⚠️ Image cannot be displayed directly")
+                    st.markdown(f"[🔗 View Image]({media_url})")
                     hdurl = apod.get('hdurl', '')
-                    if hdurl:
-                        st.markdown(f"[🔍 View HD Version]({hdurl})")
+                    if hdurl and hdurl != media_url:
+                        try:
+                            st.image(hdurl, use_container_width=True)
+                        except:
+                            st.markdown(f"[🔍 View HD Version]({hdurl})")
+
+        elif media_type == "video":
+            thumb_url = apod.get('thumbnail_url', '')
+            if thumb_url:
+                try:
+                    st.image(thumb_url, caption="Video Thumbnail", use_container_width=True)
+                except:
+                    st.info("📹 Today's APOD is a video")
             else:
-                st.warning(f"Unable to load NASA Picture (Status: {response.status_code})")
-                st.info("Visit [apod.nasa.gov](https://apod.nasa.gov) for today's image")
-                
-        except Exception as e:
-            st.warning("Unable to load NASA Picture of the Day")
-            st.error(f"Error details: {str(e)[:200]}")
-            st.info("Visit [apod.nasa.gov](https://apod.nasa.gov) for today's image")
+                st.info("📹 Today's APOD is a video")
+
+            if media_url:
+                st.markdown(f"**[▶️ Watch Video]({media_url})**")
+        else:
+            st.info("Media unavailable")
+            if media_url:
+                st.markdown(f"[View on NASA]({media_url})")
+
+        copyright_info = apod.get('copyright', '')
+        if copyright_info:
+            st.caption(f"© {copyright_info}")
+
+    with col_desc:
+        st.markdown("<h4 style='color: #7c3aed;'>📖 Explanation</h4>", unsafe_allow_html=True)
+
+        explanation = apod.get('explanation', 'No description available')
+
+        import html
+        explanation_clean = html.escape(explanation)
+
+        st.markdown(f"""
+        <div style='background: rgba(131,56,236,0.1);
+                   border: 1px solid rgba(131,56,236,0.3);
+                   border-radius: 10px;
+                   padding: 1rem;
+                   max-height: 400px;
+                   overflow-y: auto;
+                   line-height: 1.6;'>
+            {explanation_clean}
+        </div>
+        """, unsafe_allow_html=True)
+
+        hdurl = apod.get('hdurl', '')
+        if hdurl:
+            st.markdown(f"[🔍 View HD Version]({hdurl})")
+
+    # Let user know if we’re showing a fallback
+    resolved_date = apod.get("_resolved_date", apod.get("date", ""))
+    if resolved_date and resolved_date != today_et.isoformat():
+        st.warning(f"Today's APOD isn't available. Showing the most recent entry from {resolved_date}.")
+
+except Exception as e:
+    st.warning("Unable to load NASA Picture of the Day")
+    st.error(f"Error details: {str(e)[:200]}")
+    st.info("Visit [apod.nasa.gov](https://apod.nasa.gov) for today's image")
     
     
     elif st.session_state['menu_selection'] == "Celestial Tracker":
