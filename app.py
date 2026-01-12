@@ -3129,7 +3129,7 @@ div[data-testid="stTextInput"] input:focus {
         #st.markdown("<div class='cosmic-section'>📸 NASA Astronomy Picture of the Day</div>", unsafe_allow_html=True)
         
         # NASA Picture of the Day
-       # st.markdown("<div class='cosmic-section'>📸 NASA Astronomy Picture of the Day</div>", unsafe_allow_html=True)
+        st.markdown("<div class='cosmic-section'>📸 NASA Astronomy Picture of the Day</div>", unsafe_allow_html=True)
         
         try:
             NASA_API_KEY = read_secret("NASA_API_KEY", "DEMO_KEY")
